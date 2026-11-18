@@ -1,0 +1,33 @@
+services:
+  forgr:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      FORGR_DB: postgres://forgr:${DB_KENNWORT}@db:5432/forgr?sslmode=disable
+    ports:
+      - "8380:8380"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - repos:/daten
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: forgr
+      POSTGRES_PASSWORD: ${DB_KENNWORT}
+      POSTGRES_DB: forgr
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forgr -d forgr"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db:
+  repos:
