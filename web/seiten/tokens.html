@@ -1,0 +1,29 @@
+{{define "inhalt"}}
+{{$t := .Token}}
+<h1>Zugriffstoken</h1>
+{{if .D.Neu}}
+<div class="hinweis">Das neue Token steht nur jetzt hier, kopiere es:
+  <input type="text" readonly value="{{.D.Neu}}" class="code" style="margin-top:6px" aria-label="Neues Token">
+</div>
+{{end}}
+<div class="karte" style="margin-bottom:16px">
+  <p style="margin-top:0">git fragt beim Klonen oder Pushen nach Benutzername und Passwort: Benutzername <strong class="code">{{.D.Ich.Name}}</strong>, Passwort ist das Token.</p>
+  <pre class="code" style="margin:0">git clone {{.D.Basis}}/{{.D.Ich.Name}}/&lt;repo&gt;.git
+git config --global credential.helper store   # optional: Token merken</pre>
+</div>
+<form method="post" action="/tokens" class="karte leiste">
+  <input type="hidden" name="token" value="{{$t}}">
+  <input type="text" name="name" placeholder="Wofür, z. B. Laptop" style="max-width:260px">
+  <button class="primaer">Token erstellen</button>
+</form>
+{{if .D.Tokens}}
+<table style="margin-top:16px">
+  <tr><th>Name</th><th>Beginnt mit</th><th>Erstellt</th><th>Zuletzt benutzt</th><th></th></tr>
+  {{range .D.Tokens}}
+  <tr><td>{{.Name}}</td><td class="code">{{.Anfang}}…</td><td class="muted">{{datum .Erstellt}}</td><td class="muted">{{if .Zuletzt}}{{datum .Zuletzt}}{{else}}nie{{end}}</td>
+    <td style="text-align:right"><form method="post" action="/tokens/{{.ID}}/loeschen" class="inline" data-frage="Token widerrufen?"><input type="hidden" name="token" value="{{$t}}"><button class="gefahr klein">Widerrufen</button></form></td></tr>
+  {{end}}
+</table>
+{{end}}
+{{end}}
+{{define "skripte"}}<script src="/statisch/verwalten.js" defer></script>{{end}}

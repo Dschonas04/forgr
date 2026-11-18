@@ -1,0 +1,14 @@
+{{define "inhalt"}}
+<h1>Neues Repository</h1>
+<form method="post" action="/neu" class="karte" style="max-width:640px">
+  <input type="hidden" name="token" value="{{.Token}}">
+  <label for="name">Name</label>
+  <div class="leiste" style="margin:0"><span class="muted">{{.D.Ich.Name}} /</span><input type="text" id="name" name="name" style="max-width:320px" pattern="[A-Za-z0-9][A-Za-z0-9._\-]*" autofocus></div>
+  <label for="beschreibung">Beschreibung</label>
+  <input type="text" id="beschreibung" name="beschreibung">
+  <label><input type="checkbox" name="oeffentlich" value="ja"> Öffentlich (jeder Angemeldete und anonymes Klonen)</label>
+  <label for="quelle">Importieren von (optional, https-Adresse eines öffentlichen Repositorys)</label>
+  <input type="url" id="quelle" name="quelle" placeholder="https://github.com/Dschonas04/foodr.git">
+  <div style="margin-top:16px"><button class="primaer">Anlegen</button></div>
+</form>
+{{end}}

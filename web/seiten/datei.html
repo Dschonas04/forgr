@@ -1,0 +1,13 @@
+{{define "inhalt"}}
+{{$a := .D}}
+{{template "repokopf" $a.Ansicht}}
+<div class="leiste">
+  <span><a href="/{{$a.R.Voll}}/baum/{{$a.Ref}}/">{{$a.R.Name}}</a>{{range $a.Teile}} / <a href="/{{$a.R.Voll}}/{{if eq .Pfad $a.Pfad}}datei{{else}}baum{{end}}/{{$a.Ref}}/{{.Pfad}}">{{.Name}}</a>{{end}}</span>
+  <span class="muted klein">{{$a.Ref}} · {{groesse $a.Groesse}}{{if $a.Zeilen}} · {{$a.Zeilen}} Zeilen{{end}}</span>
+  <a class="knopf" style="margin-left:auto" href="/{{$a.R.Voll}}/roh/{{$a.Ref}}/{{$a.Pfad}}">Roh</a>
+</div>
+{{if $a.Bild}}<div class="karte"><img src="/{{$a.R.Voll}}/roh/{{$a.Ref}}/{{$a.Pfad}}" alt="{{$a.Name}}" style="max-width:100%"></div>
+{{else if $a.Binaer}}<div class="leer">Binärdatei. <a href="/{{$a.R.Voll}}/roh/{{$a.Ref}}/{{$a.Pfad}}">Herunterladen</a></div>
+{{else if $a.Gross}}<div class="leer">Zu groß für die Anzeige. <a href="/{{$a.R.Voll}}/roh/{{$a.Ref}}/{{$a.Pfad}}">Roh ansehen</a></div>
+{{else}}<div class="quelltext"><pre class="nummern">{{nummern $a.Zeilen}}</pre><pre>{{$a.Text}}</pre></div>{{end}}
+{{end}}

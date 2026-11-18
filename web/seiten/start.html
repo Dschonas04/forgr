@@ -1,0 +1,17 @@
+{{define "inhalt"}}
+<div class="leiste"><h1>Repositories</h1><a class="knopf primaer" href="/neu">Neues Repository</a></div>
+{{if .D.Repos}}
+<table>
+  <tr><th>Repository</th><th class="weg">Beschreibung</th><th>Sichtbar</th><th class="weg">Geändert</th></tr>
+  {{range .D.Repos}}
+  <tr class="zeile">
+    <td><a href="/{{.Voll}}"><span class="muted">{{.Besitzer}} /</span> <strong>{{.Name}}</strong></a></td>
+    <td class="weg muted">{{.Beschreibung}}</td>
+    <td>{{if .Privat}}<span class="pille">privat</span>{{else}}<span class="pille info">öffentlich</span>{{end}}</td>
+    <td class="weg muted">{{seit .Geaendert}}</td>
+  </tr>
+  {{end}}
+</table>
+{{else}}<div class="leer">Noch keine Repositories. <a href="/neu">Das erste anlegen</a></div>{{end}}
+<p class="muted klein">Du bist hier <strong>{{.D.Ich.Name}}</strong>. Für git über HTTPS brauchst du ein <a href="/tokens">Zugriffstoken</a>.</p>
+{{end}}

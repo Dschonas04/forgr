@@ -1,0 +1,29 @@
+{{define "inhalt"}}
+{{$a := .D.A}}{{$t := .Token}}
+{{template "repokopf" $a}}
+<form method="post" action="/{{$a.R.Voll}}/einstellungen" class="karte" style="max-width:640px">
+  <input type="hidden" name="token" value="{{$t}}">
+  <label for="beschreibung">Beschreibung</label>
+  <input type="text" id="beschreibung" name="beschreibung" value="{{$a.R.Beschreibung}}">
+  <label><input type="checkbox" name="oeffentlich" value="ja"{{if not $a.R.Privat}} checked{{end}}> Öffentlich (jeder Angemeldete, anonymes Klonen)</label>
+  <div style="margin-top:14px"><button class="primaer">Speichern</button></div>
+</form>
+<h2>Mitglieder</h2>
+<table style="max-width:640px">
+  {{range .D.Mitglieder}}<tr><td><strong>{{.Name}}</strong> <span class="muted">{{.Anzeige}}</span></td><td>{{.Recht}}</td>
+    <td style="text-align:right"><form method="post" action="/{{$a.R.Voll}}/mitglied" class="inline"><input type="hidden" name="token" value="{{$t}}"><input type="hidden" name="name" value="{{.Name}}"><button class="gefahr klein" name="recht" value="weg">Entfernen</button></form></td></tr>
+  {{else}}<tr><td class="muted">Nur du.</td></tr>{{end}}
+</table>
+<form method="post" action="/{{$a.R.Voll}}/mitglied" class="karte leiste" style="max-width:640px;margin-top:10px">
+  <input type="hidden" name="token" value="{{$t}}">
+  <input type="text" name="name" placeholder="Kontoname" style="max-width:220px" aria-label="Kontoname">
+  <select name="recht" style="width:auto" aria-label="Recht"><option value="lesen">lesen</option><option value="schreiben">schreiben</option></select>
+  <button>Hinzufügen</button>
+</form>
+<h2 class="gefahr">Löschen</h2>
+<form method="post" action="/{{$a.R.Voll}}/loeschen" class="karte leiste" style="max-width:640px">
+  <input type="hidden" name="token" value="{{$t}}">
+  <input type="text" name="bestaetigung" placeholder="{{$a.R.Name}} eintippen" style="max-width:240px" aria-label="Bestätigung">
+  <button class="gefahr">Repository endgültig löschen</button>
+</form>
+{{end}}

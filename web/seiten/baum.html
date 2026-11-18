@@ -1,0 +1,35 @@
+{{define "inhalt"}}
+{{$a := .D}}
+{{template "repokopf" $a}}
+{{if $a.Leer}}
+<div class="karte">
+  <h3 style="margin-top:0">Leeres Repository</h3>
+  <pre class="code">git clone {{$a.Klonen}}
+cd {{$a.R.Name}}
+echo "# {{$a.R.Name}}" &gt; README.md
+git add README.md &amp;&amp; git commit -m "Anfang"
+git push -u origin main</pre>
+  <p class="muted klein">Oder ein bestehendes: <span class="code">git remote add forgr {{$a.Klonen}} &amp;&amp; git push forgr --all</span></p>
+</div>
+{{else}}
+<div class="leiste">
+  <form method="get" class="inline" id="zweigwahl">
+    <select aria-label="Zweig" data-ziel="/{{$a.R.Voll}}/baum/">{{range $a.Zweige}}<option{{if eq . $a.Ref}} selected{{end}}>{{.}}</option>{{end}}</select>
+  </form>
+  <span><a href="/{{$a.R.Voll}}/baum/{{$a.Ref}}/">{{$a.R.Name}}</a>{{range $a.Teile}} / <a href="/{{$a.R.Voll}}/baum/{{$a.Ref}}/{{.Pfad}}">{{.Name}}</a>{{end}}</span>
+  <span style="margin-left:auto" class="klonen"><input type="text" readonly value="{{$a.Klonen}}" aria-label="Adresse zum Klonen" style="width:340px"></span>
+</div>
+{{if $a.Letzter}}<div class="muted klein" style="margin-bottom:8px"><a href="/{{$a.R.Voll}}/commit/{{$a.Letzter.SHA}}" class="code">{{$a.Letzter.Kurz}}</a> {{$a.Letzter.Betreff}} · {{$a.Letzter.Autor}} · vor {{seit $a.Letzter.Zeit}}</div>{{end}}
+<table class="dateien">
+  {{if $a.Pfad}}<tr class="zeile"><td colspan="2"><a href="/{{$a.R.Voll}}/baum/{{$a.Ref}}/{{$a.Eltern}}">..</a></td></tr>{{end}}
+  {{range $a.Eintraege}}
+  <tr class="zeile">
+    <td>{{if eq .Art "tree"}}<a href="/{{$a.R.Voll}}/baum/{{$a.Ref}}/{{.Pfad}}">📁 <strong>{{.Name}}</strong></a>{{else if eq .Art "commit"}}<span class="muted">↳ {{.Name}} (Submodul)</span>{{else}}<a href="/{{$a.R.Voll}}/datei/{{$a.Ref}}/{{.Pfad}}">{{.Name}}</a>{{end}}</td>
+    <td class="muted klein" style="text-align:right">{{if eq .Art "blob"}}{{groesse .Groesse}}{{end}}</td>
+  </tr>
+  {{end}}
+</table>
+{{if $a.Readme}}<div class="readme">{{$a.Readme}}</div>{{end}}
+{{end}}
+{{end}}
+{{define "skripte"}}<script src="/statisch/forgr.js" defer></script>{{end}}

@@ -1,0 +1,19 @@
+{{define "inhalt"}}
+{{$a := .D.A}}
+{{template "repokopf" $a}}
+<div class="leiste">
+  <a class="knopf{{if .D.OffeneListe}} primaer{{end}}" href="/{{$a.R.Voll}}/issues">Offen</a>
+  <a class="knopf{{if not .D.OffeneListe}} primaer{{end}}" href="/{{$a.R.Voll}}/issues?zu=ja">Geschlossen</a>
+</div>
+<table>
+  {{range .D.Issues}}
+  <tr class="zeile"><td><a href="/{{$a.R.Voll}}/issues/{{.Nummer}}"><strong>{{.Titel}}</strong></a><div class="muted klein">#{{.Nummer}} von {{.Verfasser}} · {{datum .Erstellt}}{{if .Kommentare}} · {{.Kommentare}} Kommentare{{end}}</div></td></tr>
+  {{else}}<tr><td class="muted">Keine Issues.</td></tr>{{end}}
+</table>
+<form method="post" action="/{{$a.R.Voll}}/issues" class="karte" style="margin-top:16px;max-width:760px">
+  <input type="hidden" name="token" value="{{.Token}}">
+  <label for="titel">Neues Issue</label><input type="text" id="titel" name="titel" placeholder="Titel" required>
+  <label for="text">Beschreibung (Markdown)</label><textarea id="text" name="text" rows="5"></textarea>
+  <div style="margin-top:10px"><button class="primaer">Anlegen</button></div>
+</form>
+{{end}}

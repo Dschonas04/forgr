@@ -1,0 +1,14 @@
+{{define "nav"}}<a href="/"{{if gleich .Nav "start"}} class="aktiv"{{end}}>Repositories</a><a href="/neu"{{if gleich .Nav "neu"}} class="aktiv"{{end}}>Neu</a><a href="/tokens"{{if gleich .Nav "tokens"}} class="aktiv"{{end}}>Zugriffstoken</a>{{end}}
+{{define "repokopf"}}
+<div class="leiste" style="margin-bottom:6px">
+  <h1><a href="/{{.R.Besitzer}}" style="text-decoration:none" class="muted">{{.R.Besitzer}}</a> / <a href="/{{.R.Voll}}" style="text-decoration:none">{{.R.Name}}</a></h1>
+  {{if .R.Privat}}<span class="pille">privat</span>{{else}}<span class="pille info">öffentlich</span>{{end}}
+</div>
+{{if .R.Beschreibung}}<p class="muted" style="margin-top:0">{{.R.Beschreibung}}</p>{{end}}
+<nav class="reiter">
+  <a href="/{{.R.Voll}}">Dateien</a>
+  {{if not .Leer}}<a href="/{{.R.Voll}}/commits/{{if .Ref}}{{.Ref}}{{else}}HEAD{{end}}">Commits</a>{{end}}
+  <a href="/{{.R.Voll}}/issues">Issues{{if .Offen}} <span class="pille klein">{{.Offen}}</span>{{end}}</a>
+  {{if eq .Recht "schreiben"}}<a href="/{{.R.Voll}}/einstellungen">Einstellungen</a>{{end}}
+</nav>
+{{end}}

@@ -1,0 +1,17 @@
+{{define "inhalt"}}
+{{$a := .D.A}}{{$i := .D.I}}
+{{template "repokopf" $a}}
+<div class="leiste"><h2 style="margin:0">{{$i.Titel}} <span class="muted">#{{$i.Nummer}}</span></h2>{{if $i.Offen}}<span class="pille gut">offen</span>{{else}}<span class="pille">geschlossen</span>{{end}}</div>
+<div class="verlauf">
+  {{range .D.Kommentare}}<div class="beitrag"><div class="meta"><strong>{{.Verfasser}}</strong> · {{datum .Erstellt}}</div><div class="readme" style="border:none;padding:0;margin:0;background:none">{{.HTML}}</div></div>
+  {{else}}<div class="muted">Noch keine Beschreibung.</div>{{end}}
+</div>
+<form method="post" action="/{{$a.R.Voll}}/issues/{{$i.Nummer}}" class="karte" style="margin-top:16px">
+  <input type="hidden" name="token" value="{{.Token}}">
+  <label for="text">Kommentar (Markdown)</label><textarea id="text" name="text" rows="5"></textarea>
+  <div class="leiste" style="margin-top:10px">
+    <button class="primaer">Kommentieren</button>
+    {{if $i.Offen}}<button name="zustand" value="zu">Schließen</button>{{else}}<button name="zustand" value="offen">Wieder öffnen</button>{{end}}
+  </div>
+</form>
+{{end}}

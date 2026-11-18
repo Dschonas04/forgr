@@ -2,8 +2,11 @@
 
 Eigenes Git-Hosting: Repositories, Merge-Requests, Issues und CI-Anbindung, auf dem eigenen Server.
 
-**Stand: Grundgerüst.** Der Server startet und zeigt eine Startseite, die
-Funktionen unten sind geplant.
+**Stand: 0.1.** Repositories über HTTPS (Smart HTTP, Benutzername plus
+Zugriffstoken), privat oder öffentlich, Import von einer https-Adresse,
+Dateien und Zweige, README-Anzeige, Commits mit Diff, Rohdateien, Issues mit
+Kommentaren, Mitglieder mit Lese- oder Schreibrecht, Anmeldung über
+Keycloak. SSH, Merge-Requests und Webhooks kommen noch.
 
 ## Geplant
 

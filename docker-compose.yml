@@ -7,11 +7,12 @@ services:
       FORGR_DB: postgres://forgr:${DB_KENNWORT}@db:5432/forgr?sslmode=disable
     ports:
       - "8380:8380"
+    volumes:
+      - einstellungen:/einstellungen
+      - repos:/daten
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - repos:/daten
 
   db:
     image: postgres:17-alpine
@@ -30,4 +31,5 @@ services:
 
 volumes:
   db:
+  einstellungen:
   repos:
