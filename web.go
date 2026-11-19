@@ -148,7 +148,10 @@ func (a *App) neuAnlegen(w http.ResponseWriter, r *http.Request) {
 	if quelle != "" {
 		ctx, abbruch := context.WithTimeout(r.Context(), 10*time.Minute)
 		defer abbruch()
-		befehl = exec.CommandContext(ctx, "git", "clone", "--bare", "--no-local", "--", quelle, ziel)
+		befehl = exec.CommandContext(ctx, "git",
+			// Nur https, keine Umleitung woandershin.
+			"-c", "protocol.allow=never", "-c", "protocol.https.allow=always", "-c", "http.followRedirects=false",
+			"clone", "--bare", "--no-local", "--", quelle, ziel)
 	} else {
 		befehl = exec.Command("git", "init", "--bare", "-b", "main", "--", ziel)
 	}

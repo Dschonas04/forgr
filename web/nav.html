@@ -2,7 +2,7 @@
 {{define "repokopf"}}
 <div class="leiste" style="margin-bottom:6px">
   <h1><a href="/{{.R.Besitzer}}" style="text-decoration:none" class="muted">{{.R.Besitzer}}</a> / <a href="/{{.R.Voll}}" style="text-decoration:none">{{.R.Name}}</a></h1>
-  {{if .R.Privat}}<span class="pille">privat</span>{{else}}<span class="pille info">öffentlich</span>{{end}}
+  {{if .R.Privat}}<span class="pille">privat</span>{{else}}<span class="pille info">alle Konten</span>{{end}}
 </div>
 {{if .R.Beschreibung}}<p class="muted" style="margin-top:0">{{.R.Beschreibung}}</p>{{end}}
 <nav class="reiter">

@@ -228,6 +228,12 @@ func (a *App) git(w http.ResponseWriter, r *http.Request, besitzer, name, rest s
 		}
 		wer = k
 	}
+	// Ohne Token kein git: auch öffentliche Repos sind nur für Konten
+	// sichtbar, wie in der Weboberfläche.
+	if wer.ID == "" {
+		verweigern(http.StatusUnauthorized, "Bitte mit Benutzername und Zugriffstoken anmelden")
+		return
+	}
 	repo, err := a.repoLaden(r.Context(), besitzer, name)
 	recht := ""
 	if err == nil {
