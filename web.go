@@ -155,7 +155,7 @@ func (a *App) neuAnlegen(w http.ResponseWriter, r *http.Request) {
 	} else {
 		befehl = exec.Command("git", "init", "--bare", "-b", "main", "--", ziel)
 	}
-	befehl.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	befehl.Env = gitUmgebung()
 	if aus, err := befehl.CombinedOutput(); err != nil {
 		a.db.Exec(r.Context(), `DELETE FROM repos WHERE id::text=$1`, id)
 		os.RemoveAll(ziel)
@@ -239,7 +239,7 @@ func (a *App) baum(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ref, pfad := r.PathValue("ref"), strings.Trim(r.PathValue("pfad"), "/")
+	ref, pfad := refUndPfad(r.Context(), a.pfad(repo.Besitzer, repo.Name), r.PathValue("rest"))
 	if !sichererRef(ref) || !sichererPfad(pfad) {
 		http.NotFound(w, r)
 		return
@@ -295,7 +295,7 @@ func (a *App) datei(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ref, pfad := r.PathValue("ref"), strings.Trim(r.PathValue("pfad"), "/")
+	ref, pfad := refUndPfad(r.Context(), a.pfad(repo.Besitzer, repo.Name), r.PathValue("rest"))
 	if !sichererRef(ref) || !sichererPfad(pfad) || pfad == "" {
 		http.NotFound(w, r)
 		return
@@ -327,7 +327,7 @@ func (a *App) roh(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ref, pfad := r.PathValue("ref"), strings.Trim(r.PathValue("pfad"), "/")
+	ref, pfad := refUndPfad(r.Context(), a.pfad(repo.Besitzer, repo.Name), r.PathValue("rest"))
 	if !sichererRef(ref) || !sichererPfad(pfad) {
 		http.NotFound(w, r)
 		return
@@ -355,8 +355,8 @@ func (a *App) commits(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ref := r.PathValue("ref")
-	if !sichererRef(ref) {
+	ref, rest := refUndPfad(r.Context(), a.pfad(repo.Besitzer, repo.Name), r.PathValue("rest"))
+	if rest != "" || !sichererRef(ref) {
 		http.NotFound(w, r)
 		return
 	}

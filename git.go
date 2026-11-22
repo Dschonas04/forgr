@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/cgi"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,7 +30,7 @@ func gitAus(ctx context.Context, repo string, args ...string) ([]byte, error) {
 	ctx, abbruch := context.WithTimeout(ctx, 20*time.Second)
 	defer abbruch()
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repo, "-c", "core.quotepath=off"}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C.UTF-8")
+	cmd.Env = gitUmgebung()
 	var fehler bytes.Buffer
 	cmd.Stderr = &fehler
 	aus, err := cmd.Output()
@@ -163,13 +164,21 @@ func commitMitDiff(ctx context.Context, repo, sha string) (Commit, []DiffDatei, 
 	gesamt := 0
 	sc := bufio.NewScanner(bytes.NewReader(rest))
 	sc.Buffer(make([]byte, 1<<20), 1<<20)
+	imAbschnitt := false
 	for sc.Scan() {
 		z := sc.Text()
 		if strings.HasPrefix(z, "diff --git ") {
 			dateien = append(dateien, DiffDatei{Name: diffName(z)})
+			imAbschnitt = false
 			continue
 		}
-		if len(dateien) == 0 || strings.HasPrefix(z, "index ") || strings.HasPrefix(z, "--- ") || strings.HasPrefix(z, "+++ ") {
+		if len(dateien) == 0 {
+			continue
+		}
+		// --- und +++ sind nur vor dem ersten Abschnitt Kopfzeilen, danach Inhalt.
+		if strings.HasPrefix(z, "@@") {
+			imAbschnitt = true
+		} else if !imAbschnitt && (strings.HasPrefix(z, "index ") || strings.HasPrefix(z, "--- ") || strings.HasPrefix(z, "+++ ")) {
 			continue
 		}
 		akt := &dateien[len(dateien)-1]
@@ -218,6 +227,24 @@ func (a *App) git(w http.ResponseWriter, r *http.Request, besitzer, name, rest s
 	default:
 		verweigern(http.StatusNotFound, "nicht gefunden")
 		return
+	}
+	// git-http-backend nimmt den letzten gleichnamigen Parameter, Go den ersten:
+	// geprüft und ausgeführt wäre sonst nicht dasselbe.
+	dienst, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil || len(dienst["service"]) > 1 || strings.Contains(r.URL.RawQuery, ";") {
+		verweigern(http.StatusBadRequest, "Anfrage mehrdeutig")
+		return
+	}
+	switch dienst.Get("service") {
+	case "", "git-upload-pack", "git-receive-pack":
+	default:
+		verweigern(http.StatusBadRequest, "Dienst unbekannt")
+		return
+	}
+	// Nur den geprüften Wert weitergeben, nicht die Rohform.
+	r.URL.RawQuery = ""
+	if d := dienst.Get("service"); d != "" {
+		r.URL.RawQuery = "service=" + d
 	}
 	var wer Konto
 	if n, t, ok := r.BasicAuth(); ok {

@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- Sicherheit: mehrdeutige service-Parameter abgelehnt, git erbt die Umgebung der App nicht mehr.
+- Zweige mit Schrägstrich, vollständige Diffs, richtiger Text zur Sichtbarkeit.
 - Sicherheit: Die SSO-Einstellung hat einen Leser für Prüfung und Speichern und lehnt Unlesbares ab.
 - Doppelte id im Seitengerüst behoben.
 - Sicherheit: Die Sperre der Verwaltung wartet weder auf den Browser noch auf den Anbieter und hat eine Zeitgrenze.

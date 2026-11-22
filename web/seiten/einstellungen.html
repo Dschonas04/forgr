@@ -5,7 +5,7 @@
   <input type="hidden" name="token" value="{{$t}}">
   <label for="beschreibung">Beschreibung</label>
   <input type="text" id="beschreibung" name="beschreibung" value="{{$a.R.Beschreibung}}">
-  <label><input type="checkbox" name="oeffentlich" value="ja"{{if not $a.R.Privat}} checked{{end}}> Öffentlich (jeder Angemeldete, anonymes Klonen)</label>
+  <label><input type="checkbox" name="oeffentlich" value="ja"{{if not $a.R.Privat}} checked{{end}}> Für alle Konten sichtbar (klonen mit Token)</label>
   <div style="margin-top:14px"><button class="primaer">Speichern</button></div>
 </form>
 <h2>Mitglieder</h2>
