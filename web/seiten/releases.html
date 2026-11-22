@@ -1,0 +1,25 @@
+{{define "inhalt"}}{{$a := .D.A}}
+{{template "repokopf" $a}}
+<div class="verlauf">
+{{range .D.Liste}}
+<article class="karte">
+  <div class="leiste"><h2 class="ohne-rand">{{.Titel}}</h2><span class="pille info code">{{.Tag}}</span><a class="knopf klein" href="/{{$a.R.Voll}}/archiv/{{.Tag}}">Quelltext (tar.gz)</a></div>
+  <div class="muted klein"><a class="code" href="/{{$a.R.Voll}}/commit/{{.SHA}}">{{printf "%.8s" .SHA}}</a> · {{datum .Zeit}}</div>
+  {{if .Notizen}}{{.HTML}}{{end}}
+</article>
+{{else}}<div class="leer"><strong>Noch keine Tags</strong>Ein Release ist ein Tag mit Notizen.</div>{{end}}
+</div>
+{{if and (eq $a.Recht "schreiben") $a.Zweige}}
+<form method="post" action="/{{$a.R.Voll}}/releases" class="karte mr-neu">
+  <h2>Release</h2>
+  <input type="hidden" name="token" value="{{.Token}}">
+  <div class="feld-reihe">
+    <div><label for="tag">Tag (neu oder vorhanden)</label><input type="text" id="tag" name="tag" placeholder="v1.0.0" required></div>
+    <div><label for="zweig">Neuer Tag entsteht auf</label><select id="zweig" name="zweig">{{range $a.Zweige}}<option>{{.}}</option>{{end}}</select></div>
+  </div>
+  <label for="titel">Titel</label><input type="text" id="titel" name="titel">
+  <label for="text">Notizen (Markdown)</label><textarea id="text" name="text"></textarea>
+  <div class="leiste fuss"><button class="primaer">Speichern</button></div>
+</form>
+{{end}}
+{{end}}

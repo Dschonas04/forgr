@@ -14,7 +14,11 @@ type Issue struct {
 	Nummer, Kommentare   int
 	Offen                bool
 	Erstellt, Geaendert  time.Time
+	Labels               []string
+	Meilenstein          string
 }
+
+func (i Issue) LabelText() string { return strings.Join(i.Labels, ", ") }
 
 type Kommentar struct {
 	Verfasser string
@@ -37,8 +41,9 @@ func (a *App) issues(w http.ResponseWriter, r *http.Request) {
 	}
 	offen := r.URL.Query().Get("zu") != "ja"
 	rows, err := a.db.Query(r.Context(), `SELECT i.id::text, i.nummer, i.titel, COALESCE(k.name, ''), i.offen, i.erstellt, i.geaendert,
-		(SELECT count(*) FROM kommentare c WHERE c.issue = i.id)
-		FROM issues i LEFT JOIN konten k ON k.id = i.verfasser WHERE i.repo=$1::uuid AND i.offen=$2 ORDER BY i.nummer DESC`, repo.ID, offen)
+		(SELECT count(*) FROM kommentare c WHERE c.issue = i.id), i.labels, i.meilenstein
+		FROM issues i LEFT JOIN konten k ON k.id = i.verfasser WHERE i.repo=$1::uuid AND i.offen=$2 AND ($3 = '' OR $3 = ANY(i.labels)) AND ($4 = '' OR i.meilenstein = $4)
+		ORDER BY i.nummer DESC`, repo.ID, offen, r.URL.Query().Get("label"), r.URL.Query().Get("meilenstein"))
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -47,12 +52,18 @@ func (a *App) issues(w http.ResponseWriter, r *http.Request) {
 	var l []Issue
 	for rows.Next() {
 		var i Issue
-		if rows.Scan(&i.ID, &i.Nummer, &i.Titel, &i.Verfasser, &i.Offen, &i.Erstellt, &i.Geaendert, &i.Kommentare) == nil {
+		if rows.Scan(&i.ID, &i.Nummer, &i.Titel, &i.Verfasser, &i.Offen, &i.Erstellt, &i.Geaendert, &i.Kommentare, &i.Labels, &i.Meilenstein) == nil {
 			l = append(l, i)
 		}
 	}
+	rows.Close()
+	ms, err := a.meilensteine(r.Context(), repo.ID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 	a.v.zeigen(w, r, "issues", a.daten(r, "Issues · "+repo.Voll(), "", map[string]any{
-		"A": a.ansicht(r, repo, recht, "", ""), "Issues": l, "OffeneListe": offen}))
+		"A": a.ansicht(r, repo, recht, "", ""), "Issues": l, "OffeneListe": offen, "Meilensteine": ms}))
 }
 
 func (a *App) issueAnlegen(w http.ResponseWriter, r *http.Request) {
@@ -85,9 +96,9 @@ func (a *App) issueAnlegen(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) issueLaden(r *http.Request, repo Repo) (Issue, error) {
 	var i Issue
-	err := a.db.QueryRow(r.Context(), `SELECT i.id::text, i.nummer, i.titel, COALESCE(k.name, ''), i.offen, i.erstellt, i.geaendert
+	err := a.db.QueryRow(r.Context(), `SELECT i.id::text, i.nummer, i.titel, COALESCE(k.name, ''), i.offen, i.erstellt, i.geaendert, i.labels, i.meilenstein
 		FROM issues i LEFT JOIN konten k ON k.id = i.verfasser WHERE i.repo=$1::uuid AND i.nummer::text=$2`, repo.ID, r.PathValue("n")).
-		Scan(&i.ID, &i.Nummer, &i.Titel, &i.Verfasser, &i.Offen, &i.Erstellt, &i.Geaendert)
+		Scan(&i.ID, &i.Nummer, &i.Titel, &i.Verfasser, &i.Offen, &i.Erstellt, &i.Geaendert, &i.Labels, &i.Meilenstein)
 	return i, err
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"html/template"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -193,6 +194,7 @@ type Ansicht struct {
 	Klonen    string
 	Letzter   *Commit
 	Offen     int
+	OffeneMR  int
 }
 
 type Teil struct{ Name, Pfad string }
@@ -222,6 +224,9 @@ func (a *App) ansicht(r *http.Request, repo Repo, recht, ref, pfad string) Ansic
 		Zweige: zweige(r.Context(), p), Klonen: basis(r) + "/" + repo.Voll() + ".git"}
 	v.Leer = len(v.Zweige) == 0
 	a.db.QueryRow(r.Context(), `SELECT count(*) FROM issues WHERE repo=$1::uuid AND offen`, repo.ID).Scan(&v.Offen)
+	if err := a.db.QueryRow(r.Context(), `SELECT count(*) FROM mrs WHERE repo=$1::uuid AND zustand='offen'`, repo.ID).Scan(&v.OffeneMR); err != nil {
+		log.Printf("Merge-Requests zählen: %v", err)
+	}
 	return v
 }
 

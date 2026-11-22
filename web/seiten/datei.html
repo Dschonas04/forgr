@@ -4,6 +4,7 @@
 <div class="leiste">
   <span><a href="/{{$a.R.Voll}}/baum/{{$a.Ref}}/">{{$a.R.Name}}</a>{{range $a.Teile}} / <a href="/{{$a.R.Voll}}/{{if eq .Pfad $a.Pfad}}datei{{else}}baum{{end}}/{{$a.Ref}}/{{.Pfad}}">{{.Name}}</a>{{end}}</span>
   <span class="muted klein">{{$a.Ref}} · {{groesse $a.Groesse}}{{if $a.Zeilen}} · {{$a.Zeilen}} Zeilen{{end}}</span>
+  {{if not (or $a.Bild $a.Binaer $a.Gross)}}<a class="knopf" href="/{{$a.R.Voll}}/blame/{{$a.Ref}}/{{$a.Pfad}}">Blame</a>{{end}}
   <a class="knopf" style="margin-left:auto" href="/{{$a.R.Voll}}/roh/{{$a.Ref}}/{{$a.Pfad}}">Roh</a>
 </div>
 {{if $a.Bild}}<div class="karte"><img src="/{{$a.R.Voll}}/roh/{{$a.Ref}}/{{$a.Pfad}}" alt="{{$a.Name}}" style="max-width:100%"></div>

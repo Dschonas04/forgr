@@ -9,6 +9,8 @@
   <a href="/{{.R.Voll}}">Dateien</a>
   {{if not .Leer}}<a href="/{{.R.Voll}}/commits/{{if .Ref}}{{.Ref}}{{else}}HEAD{{end}}">Commits</a>{{end}}
   <a href="/{{.R.Voll}}/issues">Issues{{if .Offen}} <span class="pille klein">{{.Offen}}</span>{{end}}</a>
+  <a href="/{{.R.Voll}}/mr">Merge-Requests{{if .OffeneMR}} <span class="pille klein">{{.OffeneMR}}</span>{{end}}</a>
+  <a href="/{{.R.Voll}}/releases">Releases</a>
   {{if eq .Recht "schreiben"}}<a href="/{{.R.Voll}}/einstellungen">Einstellungen</a>{{end}}
 </nav>
 {{end}}

@@ -1,0 +1,9 @@
+{{define "inhalt"}}{{$a := .D.A}}
+{{template "repokopf" $a}}
+<div class="leiste"><h2 class="ohne-rand">{{$a.Pfad}}</h2><a class="knopf" href="/{{$a.R.Voll}}/datei/{{$a.Ref}}/{{$a.Pfad}}">Datei</a></div>
+<div class="blame code">
+{{range .D.Zeilen}}<div class="bz{{if .Erste}} erste{{end}}">
+<span class="bwer">{{if .Erste}}<a href="/{{$a.R.Voll}}/commit/{{.SHA}}" title="{{datum .Zeit}}">{{.Kurz}}</a> {{.Autor}}{{end}}</span><span class="znr">{{.Nr}}</span><span class="btext">{{.Text}}</span>
+</div>{{end}}
+</div>
+{{end}}

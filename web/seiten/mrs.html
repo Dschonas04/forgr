@@ -1,0 +1,25 @@
+{{define "inhalt"}}{{$a := .D.A}}{{$std := .D.Standard}}
+{{template "repokopf" $a}}
+<div class="leiste">
+  <a class="knopf{{if .D.OffeneListe}} primaer{{end}}" href="/{{$a.R.Voll}}/mr">Offen</a>
+  <a class="knopf{{if not .D.OffeneListe}} primaer{{end}}" href="/{{$a.R.Voll}}/mr?zu=ja">Erledigt</a>
+</div>
+{{if .D.MRs}}<table>
+{{range .D.MRs}}<tr class="zeile"><td><a href="/{{$a.R.Voll}}/mr/{{.Nummer}}"><strong>{{.Titel}}</strong></a>
+<div class="muted klein">!{{.Nummer}} von {{.Verfasser}} · <span class="code">{{.Quelle}}</span> nach <span class="code">{{.Ziel}}</span> · {{datum .Erstellt}}</div></td>
+<td class="rechts"><span class="pille{{if .Offen}} info{{end}}">{{.ZustandName}}</span></td></tr>{{end}}
+</table>{{else}}<div class="leer"><strong>Keine Merge-Requests</strong></div>{{end}}
+{{if and (eq $a.Recht "schreiben") (gt (len $a.Zweige) 1)}}
+<form method="post" action="/{{$a.R.Voll}}/mr" class="karte mr-neu">
+  <h2>Neuer Merge-Request</h2>
+  <input type="hidden" name="token" value="{{.Token}}">
+  <div class="feld-reihe">
+    <div><label for="quelle">Von</label><select id="quelle" name="quelle">{{range $a.Zweige}}{{if ne . $std}}<option>{{.}}</option>{{end}}{{end}}<option>{{$std}}</option></select></div>
+    <div><label for="ziel">Nach</label><select id="ziel" name="ziel">{{range $a.Zweige}}<option{{if eq . $std}} selected{{end}}>{{.}}</option>{{end}}</select></div>
+  </div>
+  <label for="titel">Titel</label><input type="text" id="titel" name="titel" maxlength="200">
+  <label for="text">Beschreibung (Markdown)</label><textarea id="text" name="text"></textarea>
+  <div class="leiste fuss"><button class="primaer">Anlegen</button></div>
+</form>
+{{end}}
+{{end}}

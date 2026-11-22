@@ -62,3 +62,46 @@ CREATE TABLE IF NOT EXISTS admins (
 	kennung text PRIMARY KEY,
 	seit    timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE issues ADD COLUMN IF NOT EXISTS labels text[] NOT NULL DEFAULT '{}';
+ALTER TABLE issues ADD COLUMN IF NOT EXISTS meilenstein text NOT NULL DEFAULT '';
+
+-- Merge-Requests zwischen Zweigen eines Repositorys.
+CREATE TABLE IF NOT EXISTS mrs (
+	id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	repo       uuid NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+	nummer     int NOT NULL,
+	titel      text NOT NULL,
+	text       text NOT NULL DEFAULT '',
+	quelle     text NOT NULL,
+	ziel       text NOT NULL,
+	zustand    text NOT NULL DEFAULT 'offen',   -- offen | zusammengefuehrt | geschlossen
+	verfasser  uuid REFERENCES konten(id) ON DELETE SET NULL,
+	quelle_sha text NOT NULL DEFAULT '',        -- beim Zusammenführen festgehalten
+	ziel_sha   text NOT NULL DEFAULT '',
+	merge_sha  text NOT NULL DEFAULT '',
+	erstellt   timestamptz NOT NULL DEFAULT now(),
+	geaendert  timestamptz NOT NULL DEFAULT now(),
+	UNIQUE (repo, nummer)
+);
+
+CREATE TABLE IF NOT EXISTS mr_beitraege (
+	id        bigserial PRIMARY KEY,
+	mr        uuid NOT NULL REFERENCES mrs(id) ON DELETE CASCADE,
+	verfasser uuid REFERENCES konten(id) ON DELETE SET NULL,
+	art       text NOT NULL DEFAULT 'kommentar', -- kommentar | zustimmung | aenderung
+	text      text NOT NULL DEFAULT '',
+	datei     text NOT NULL DEFAULT '',
+	zeile     int NOT NULL DEFAULT 0,
+	sha       text NOT NULL DEFAULT '',          -- Stand der Quelle, auf den er sich bezieht
+	erstellt  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS releases (
+	repo      uuid NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+	tag       text NOT NULL,
+	titel     text NOT NULL,
+	text      text NOT NULL DEFAULT '',
+	erstellt  timestamptz NOT NULL DEFAULT now(),
+	PRIMARY KEY (repo, tag)
+);

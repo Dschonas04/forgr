@@ -159,6 +159,74 @@ func TestAblaufMitGit(t *testing.T) {
 		}
 	}
 
+	// Merge-Request: anlegen, ansehen, kommentieren, zusammenführen.
+	qs, err := zweigStand(ctx, bare, "feature/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := ruf("POST", "/anna/probe/mr", url.Values{"quelle": {"feature/x"}, "ziel": {"main"}, "titel": {"Kommentar neu"}}); code != http.StatusSeeOther {
+		t.Fatalf("MR anlegen: %d", code)
+	}
+	if code, b := ruf("GET", "/anna/probe/mr/1", nil); code != 200 || !strings.Contains(b, "ohne Konflikte") || !strings.Contains(b, "neue Zeile") {
+		t.Fatalf("MR ansehen: %d", code)
+	}
+	ruf("POST", "/anna/probe/mr/1", url.Values{"sha": {qs}, "datei": {"a.sql"}, "zeile": {"1"}, "text": {"ZEILENKOMMENTAR"}})
+	if _, b := ruf("GET", "/anna/probe/mr/1", nil); !strings.Contains(b, `<div class="zkommentar">`) || !strings.Contains(b, "ZEILENKOMMENTAR") {
+		t.Error("Zeilenkommentar fehlt")
+	}
+	if code, _ := ruf("POST", "/anna/probe/mr/1", url.Values{"sha": {qs}, "art": {"zustimmung"}}); code != http.StatusForbidden {
+		t.Errorf("Verfasserin stimmt sich selbst zu: %d", code)
+	}
+	vorMerge, err := zweigStand(ctx, bare, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ruf("POST", "/anna/probe/mr/1/zusammen", url.Values{"sha": {vorMerge}})
+	if jetzt, err := zweigStand(ctx, bare, "main"); err != nil || jetzt != vorMerge {
+		t.Error("Merge mit veraltetem Stand")
+	}
+	ruf("POST", "/anna/probe/mr/1/zusammen", url.Values{"sha": {qs}})
+	if b, err := inhalt(ctx, bare, "main", "a.sql"); err != nil || !strings.HasPrefix(string(b), "++ neue Zeile") {
+		t.Errorf("Merge nicht angekommen: %v", err)
+	}
+
+	// Zwei Änderungen an derselben Zeile.
+	git("checkout", "main")
+	git("pull", u.String(), "main")
+	git("checkout", "-b", "konflikt")
+	schreib("links\nSELECT 1;\n")
+	git("commit", "-am", "links")
+	git("push", u.String(), "konflikt")
+	git("checkout", "main")
+	schreib("rechts\nSELECT 1;\n")
+	git("commit", "-am", "rechts")
+	git("push", u.String(), "main")
+	ruf("POST", "/anna/probe/mr", url.Values{"quelle": {"konflikt"}, "ziel": {"main"}})
+	if code, b := ruf("GET", "/anna/probe/mr/2", nil); code != 200 || !strings.Contains(b, "Konflikte</span>") {
+		t.Errorf("Konflikt nicht erkannt: %d", code)
+	}
+
+	if code, _ := ruf("GET", "/anna/probe/blame/main/a.sql", nil); code != 200 {
+		t.Errorf("Blame: %d", code)
+	}
+	ruf("POST", "/anna/probe/releases", url.Values{"tag": {"v1.0.0"}, "zweig": {"main"}, "text": {"NOTIZEN"}})
+	if code, b := ruf("GET", "/anna/probe/releases", nil); code != 200 || !strings.Contains(b, "NOTIZEN") {
+		t.Errorf("Release: %d", code)
+	}
+	if code, b := ruf("GET", "/anna/probe/archiv/v1.0.0", nil); code != 200 || !strings.HasPrefix(b, "\x1f\x8b") {
+		t.Errorf("Archiv: %d", code)
+	}
+	ruf("POST", "/anna/probe/issues", url.Values{"titel": {"Einordnen"}})
+	ruf("POST", "/anna/probe/issues/1/einordnen", url.Values{"labels": {"bug, eilig"}, "meilenstein": {"1.0"}})
+	if code, b := ruf("GET", "/anna/probe/issues?label=eilig", nil); code != 200 || !strings.Contains(b, "Einordnen") || !strings.Contains(b, "0 von 1 fertig") {
+		t.Errorf("Labels: %d", code)
+	}
+
+	for _, p := range []string{"", "/mr", "/mr?zu=ja", "/mr/1", "/mr/2", "/releases", "/blame/main/a.sql", "/issues", "/issues/1", "/commits/main", "/baum/main/", "/datei/main/a.sql"} {
+		if code, b := ruf("GET", "/anna/probe"+p, nil); code != 200 || !strings.Contains(b, "</html>") {
+			t.Errorf("Seite %q: %d", p, code)
+		}
+	}
 	if _, b := ruf("GET", "/neu", nil); strings.Contains(b, "anonymes Klonen") {
 		t.Error("Oberfläche verspricht anonymes Klonen")
 	}

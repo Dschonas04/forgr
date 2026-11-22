@@ -1,0 +1,56 @@
+{{define "inhalt"}}{{$a := .D.A}}{{$m := .D.M}}{{$d := .D}}{{$t := .Token}}
+{{template "repokopf" $a}}
+<div class="leiste"><h2 class="ohne-rand">{{$m.Titel}} <span class="muted">!{{$m.Nummer}}</span></h2>
+  <span class="pille{{if $m.Offen}} info{{end}}">{{$m.ZustandName}}</span>
+  {{if $d.Ja}}<span class="pille gut">{{mehrzahl $d.Ja "Zustimmung" "Zustimmungen"}}</span>{{end}}
+  {{if $d.Nein}}<span class="pille warn">Änderungen gewünscht</span>{{end}}
+</div>
+<p class="muted klein">{{$m.Verfasser}} möchte <span class="code">{{$m.Quelle}}</span> in <span class="code">{{$m.Ziel}}</span> übernehmen</p>
+{{if $m.Text}}<div class="readme">{{$d.Text}}</div>{{end}}
+{{if $m.Offen}}
+<div class="karte merge-stand">
+  {{if $d.Fehlt}}<span class="pille schlecht">Ein Zweig fehlt</span>
+  {{else if $d.Konflikt}}<span class="pille schlecht">Konflikte</span> <span class="muted">Bitte lokal auflösen und pushen.</span>
+  {{else}}<span class="pille gut">ohne Konflikte</span>
+    {{if eq $a.Recht "schreiben"}}<form method="post" action="/{{$a.R.Voll}}/mr/{{$m.Nummer}}/zusammen">
+      <input type="hidden" name="token" value="{{$t}}"><input type="hidden" name="sha" value="{{$d.SHA}}">
+      <button class="primaer">Zusammenführen</button></form>{{end}}
+  {{end}}
+</div>
+{{else if $m.MergeSHA}}<p>Zusammengeführt mit <a class="code" href="/{{$a.R.Voll}}/commit/{{$m.MergeSHA}}">{{printf "%.8s" $m.MergeSHA}}</a></p>{{end}}
+
+<h2>Gespräch</h2>
+<div class="verlauf">
+{{range $d.Beitraege}}<div class="beitrag"><div class="meta"><strong>{{.Verfasser}}</strong> · {{datum .Erstellt}}
+{{if eq .Art "zustimmung"}} · stimmt zu{{else if eq .Art "aenderung"}} · wünscht Änderungen{{end}}{{if .Datei}} · {{.Datei}}:{{.Zeile}}{{end}}{{if .Veraltet}} · zu einem älteren Stand{{end}}</div>{{.HTML}}</div>
+{{else}}<p class="muted">Noch nichts.</p>{{end}}
+</div>
+<form method="post" action="/{{$a.R.Voll}}/mr/{{$m.Nummer}}" class="karte mr-neu">
+  <input type="hidden" name="token" value="{{$t}}"><input type="hidden" name="sha" value="{{$d.SHA}}">
+  <label for="text">Kommentar (Markdown)</label><textarea id="text" name="text"></textarea>
+  <div class="leiste fuss">
+    <button class="primaer">Kommentieren</button>
+    {{if and $m.Offen (eq $a.Recht "schreiben") (ne $m.Verfasser "")}}<button name="art" value="zustimmung">Zustimmen</button><button name="art" value="aenderung">Änderungen wünschen</button>{{end}}
+    {{if $m.Offen}}<button name="zustand" value="zu">Schließen</button>{{else if eq $m.Zustand "geschlossen"}}<button name="zustand" value="offen">Wieder öffnen</button>{{end}}
+  </div>
+</form>
+
+<h2>Änderungen <span class="plus-zahl">+{{$d.Plus}}</span> <span class="minus-zahl">-{{$d.Minus}}</span></h2>
+{{if $d.DiffFehler}}<div class="fehler">{{$d.DiffFehler}}</div>{{end}}
+{{range $d.Dateien}}{{$name := .Name}}
+<div class="diff review">
+  <div class="kopf"><span class="dateiname">{{.Name}}</span><span class="plus-zahl">+{{.Plus}}</span><span class="minus-zahl">-{{.Minus}}</span></div>
+  {{range .Z}}
+    {{if and .Neu $m.Offen}}<details class="kommentierbar"><summary class="z {{.Klasse}}"><span class="znr">{{.Neu}}</span>{{.Text}}</summary>
+      <form method="post" action="/{{$a.R.Voll}}/mr/{{$m.Nummer}}" class="zeilenform">
+        <input type="hidden" name="token" value="{{$t}}"><input type="hidden" name="sha" value="{{$d.SHA}}">
+        <input type="hidden" name="datei" value="{{$name}}"><input type="hidden" name="zeile" value="{{.Neu}}">
+        <textarea name="text" required aria-label="Kommentar zu Zeile {{.Neu}}"></textarea><button>Kommentieren</button>
+      </form></details>
+    {{else}}<div class="z {{.Klasse}}"><span class="znr">{{if .Neu}}{{.Neu}}{{end}}</span>{{.Text}}</div>{{end}}
+    {{range .Beitraege}}<div class="zkommentar"><div class="muted klein"><strong>{{.Verfasser}}</strong> · {{datum .Erstellt}}</div>{{.HTML}}</div>{{end}}
+  {{end}}
+  {{if .Gekuerzt}}<div class="z muted">gekürzt</div>{{end}}
+</div>
+{{end}}
+{{end}}

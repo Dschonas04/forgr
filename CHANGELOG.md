@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- Sicherheit: Zweige, Tags und Commits werden eindeutig aufgelöst, ein Tag kann keinen Zweig und keinen Commit überdecken.
+- Merge-Requests mit Review, Zeilenkommentaren und Zusammenführen, Blame, Releases, Labels und Meilensteine.
 - Sicherheit: mehrdeutige service-Parameter abgelehnt, git erbt die Umgebung der App nicht mehr.
 - Zweige mit Schrägstrich, vollständige Diffs, richtiger Text zur Sichtbarkeit.
 - Sicherheit: Die SSO-Einstellung hat einen Leser für Prüfung und Speichern und lehnt Unlesbares ab.

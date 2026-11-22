@@ -2,6 +2,12 @@
 {{$a := .D.A}}{{$i := .D.I}}
 {{template "repokopf" $a}}
 <div class="leiste"><h2 style="margin:0">{{$i.Titel}} <span class="muted">#{{$i.Nummer}}</span></h2>{{if $i.Offen}}<span class="pille gut">offen</span>{{else}}<span class="pille">geschlossen</span>{{end}}</div>
+{{if eq $a.Recht "schreiben"}}<form method="post" action="/{{$a.R.Voll}}/issues/{{$i.Nummer}}/einordnen" class="filter">
+  <input type="hidden" name="token" value="{{.Token}}">
+  <input type="text" name="labels" value="{{$i.LabelText}}" placeholder="Labels, mit Komma" aria-label="Labels">
+  <input type="text" name="meilenstein" value="{{$i.Meilenstein}}" placeholder="Meilenstein" aria-label="Meilenstein">
+  <button>Einordnen</button>
+</form>{{else}}<div class="fortschritt">{{range $i.Labels}}<span class="pille info">{{.}}</span>{{end}}{{if $i.Meilenstein}}<span class="pille">{{$i.Meilenstein}}</span>{{end}}</div>{{end}}
 <div class="verlauf">
   {{range .D.Kommentare}}<div class="beitrag"><div class="meta"><strong>{{.Verfasser}}</strong> · {{datum .Erstellt}}</div><div class="readme" style="border:none;padding:0;margin:0;background:none">{{.HTML}}</div></div>
   {{else}}<div class="muted">Noch keine Beschreibung.</div>{{end}}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cgi"
 	"net/url"
@@ -33,12 +34,30 @@ func gitAus(ctx context.Context, repo string, args ...string) ([]byte, error) {
 	cmd.Env = gitUmgebung()
 	var fehler bytes.Buffer
 	cmd.Stderr = &fehler
-	aus, err := cmd.Output()
+	rohr, err := cmd.StdoutPipe()
 	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	aus, lesen := io.ReadAll(io.LimitReader(rohr, gitMax+1))
+	if lesen != nil || len(aus) > gitMax {
+		abbruch()
+		_ = cmd.Wait() // das Ende ist erzwungen, der Grund steht schon fest
+		if lesen != nil {
+			return nil, lesen
+		}
+		return nil, errors.New("Ausgabe von git zu groß")
+	}
+	if err := cmd.Wait(); err != nil {
 		return aus, fmt.Errorf("%v: %s", err, strings.TrimSpace(fehler.String()))
 	}
 	return aus, nil
 }
+
+// mehr liest die App von git nicht in den Speicher
+const gitMax = 32 << 20
 
 var refMuster = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/\-]{0,200}$`)
 
@@ -51,7 +70,7 @@ func sichererPfad(p string) bool {
 }
 
 func zweige(ctx context.Context, repo string) []string {
-	aus, err := gitAus(ctx, repo, "for-each-ref", "--sort=-committerdate", "--format=%(refname:short)", "refs/heads")
+	aus, err := gitAus(ctx, repo, "for-each-ref", "--sort=-committerdate", "--format=%(refname:strip=2)", "refs/heads")
 	if err != nil {
 		return nil
 	}
@@ -66,8 +85,8 @@ func zweige(ctx context.Context, repo string) []string {
 
 func standardzweig(ctx context.Context, repo string) string {
 	l := zweige(ctx, repo)
-	if aus, err := gitAus(ctx, repo, "symbolic-ref", "--short", "HEAD"); err == nil {
-		z := strings.TrimSpace(string(aus))
+	if aus, err := gitAus(ctx, repo, "symbolic-ref", "HEAD"); err == nil {
+		z := strings.TrimPrefix(strings.TrimSpace(string(aus)), "refs/heads/")
 		for _, b := range l {
 			if b == z {
 				return z
@@ -87,6 +106,10 @@ type Eintrag struct {
 
 // liste: Inhalt eines Verzeichnisses an einem Stand, Ordner zuerst.
 func liste(ctx context.Context, repo, ref, pfad string) ([]Eintrag, error) {
+	ref, err := aufloesen(ctx, repo, ref)
+	if err != nil {
+		return nil, err
+	}
 	aus, err := gitAus(ctx, repo, "ls-tree", "-z", "-l", "--end-of-options", ref+":"+pfad)
 	if err != nil {
 		return nil, err
@@ -114,6 +137,10 @@ func liste(ctx context.Context, repo, ref, pfad string) ([]Eintrag, error) {
 }
 
 func inhalt(ctx context.Context, repo, ref, pfad string) ([]byte, error) {
+	ref, err := aufloesen(ctx, repo, ref)
+	if err != nil {
+		return nil, err
+	}
 	return gitAus(ctx, repo, "cat-file", "blob", "--end-of-options", ref+":"+pfad)
 }
 
@@ -123,6 +150,10 @@ type Commit struct {
 }
 
 func protokoll(ctx context.Context, repo, ref string, n int) ([]Commit, error) {
+	ref, err := aufloesen(ctx, repo, ref)
+	if err != nil {
+		return nil, err
+	}
 	aus, err := gitAus(ctx, repo, "log", "-z", "--format=%H%x1f%an%x1f%ae%x1f%at%x1f%s", "-n", strconv.Itoa(n), "--end-of-options", ref, "--")
 	if err != nil {
 		return nil, err
@@ -139,7 +170,10 @@ func protokoll(ctx context.Context, repo, ref string, n int) ([]Commit, error) {
 	return l, nil
 }
 
-type DiffZeile struct{ Klasse, Text string }
+type DiffZeile struct {
+	Klasse, Text string
+	Neu          int // Zeilennummer im neuen Stand, 0 bei entfernten
+}
 
 type DiffDatei struct {
 	Name        string
@@ -149,7 +183,11 @@ type DiffDatei struct {
 }
 
 func commitMitDiff(ctx context.Context, repo, sha string) (Commit, []DiffDatei, error) {
-	aus, err := gitAus(ctx, repo, "show", "--format=%H%x1f%an%x1f%ae%x1f%at%x1f%s%x1f%b%x1e", "--patch", "--no-color", "-M", "--end-of-options", sha, "--")
+	sha, err := aufloesen(ctx, repo, sha)
+	if err != nil {
+		return Commit{}, nil, err
+	}
+	aus, err := gitAus(ctx, repo, "show", "--no-ext-diff", "--no-textconv", "--format=%H%x1f%an%x1f%ae%x1f%at%x1f%s%x1f%b%x1e", "--patch", "--no-color", "-M", "--end-of-options", sha, "--")
 	if err != nil {
 		return Commit{}, nil, err
 	}
@@ -160,11 +198,26 @@ func commitMitDiff(ctx context.Context, repo, sha string) (Commit, []DiffDatei, 
 	}
 	t, _ := strconv.ParseInt(f[3], 10, 64)
 	c := Commit{SHA: f[0], Kurz: f[0][:8], Autor: f[1], Email: f[2], Zeit: time.Unix(t, 0), Betreff: f[4], Text: strings.TrimSpace(f[5])}
+	return c, diffLesen(rest), nil
+}
+
+var abschnittKopf = regexp.MustCompile(`^@@ .*?\+(\d+)(?:,\d+)? @@`)
+
+// diffZwischen: was quelle seit dem gemeinsamen Anfang mit ziel geändert hat.
+func diffZwischen(ctx context.Context, repo, ziel, quelle string) ([]DiffDatei, error) {
+	aus, err := gitAus(ctx, repo, "diff", "--patch", "--no-color", "--no-ext-diff", "--no-textconv", "-M", "--end-of-options", ziel+"..."+quelle, "--")
+	if err != nil {
+		return nil, err
+	}
+	return diffLesen(aus), nil
+}
+
+func diffLesen(roh []byte) []DiffDatei {
 	var dateien []DiffDatei
-	gesamt := 0
-	sc := bufio.NewScanner(bytes.NewReader(rest))
-	sc.Buffer(make([]byte, 1<<20), 1<<20)
+	gesamt, neu := 0, 0
 	imAbschnitt := false
+	sc := bufio.NewScanner(bytes.NewReader(roh))
+	sc.Buffer(make([]byte, 1<<20), gitMax)
 	for sc.Scan() {
 		z := sc.Text()
 		if strings.HasPrefix(z, "diff --git ") {
@@ -182,25 +235,34 @@ func commitMitDiff(ctx context.Context, repo, sha string) (Commit, []DiffDatei, 
 			continue
 		}
 		akt := &dateien[len(dateien)-1]
-		k := ""
+		k, nr := "", 0
 		switch {
 		case strings.HasPrefix(z, "@@"):
 			k = "abschnitt"
+			if m := abschnittKopf.FindStringSubmatch(z); m != nil {
+				if n, err := strconv.Atoi(m[1]); err == nil {
+					neu = n
+				}
+			}
 		case strings.HasPrefix(z, "+"):
-			k = "plus"
+			k, nr = "plus", neu
 			akt.Plus++
+			neu++
 		case strings.HasPrefix(z, "-"):
 			k = "minus"
 			akt.Minus++
+		case imAbschnitt && strings.HasPrefix(z, " "):
+			nr = neu
+			neu++
 		}
 		gesamt++
 		if len(akt.Zeilen) < 2000 && gesamt < 20000 {
-			akt.Zeilen = append(akt.Zeilen, DiffZeile{k, z})
+			akt.Zeilen = append(akt.Zeilen, DiffZeile{Klasse: k, Text: z, Neu: nr})
 		} else {
 			akt.Gekuerzt = true
 		}
 	}
-	return c, dateien, nil
+	return dateien
 }
 
 func diffName(z string) string {

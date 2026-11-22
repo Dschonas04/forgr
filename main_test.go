@@ -84,7 +84,7 @@ func TestSeitenRendern(t *testing.T) {
 		"baum":          a,
 		"datei":         DateiAnsicht{Ansicht: a, Name: "d.go", Text: "package x\n", Zeilen: 2, Groesse: 10},
 		"commits":       map[string]any{"A": a, "Commits": []Commit{c}},
-		"commit":        map[string]any{"A": a, "C": c, "Dateien": []DiffDatei{{Name: "d.go", Plus: 1, Minus: 1, Zeilen: []DiffZeile{{"abschnitt", "@@"}, {"plus", "+a"}}}}, "Plus": 1, "Minus": 1},
+		"commit":        map[string]any{"A": a, "C": c, "Dateien": []DiffDatei{{Name: "d.go", Plus: 1, Minus: 1, Zeilen: []DiffZeile{{Klasse: "abschnitt", Text: "@@"}, {Klasse: "plus", Text: "+a"}}}}, "Plus": 1, "Minus": 1},
 		"einstellungen": map[string]any{"A": a, "Mitglieder": []Mitglied{{"anna", "Anna", "lesen"}}},
 		"issues":        map[string]any{"A": a, "Issues": []Issue{{Nummer: 1, Titel: "Bug", Offen: true, Erstellt: jetzt}}, "OffeneListe": true},
 		"issue":         map[string]any{"A": a, "I": Issue{Nummer: 1, Titel: "Bug", Offen: true}, "Kommentare": []Kommentar{{Verfasser: "j", HTML: mdSicher("**x**"), Erstellt: jetzt}}},

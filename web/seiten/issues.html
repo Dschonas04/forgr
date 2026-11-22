@@ -5,9 +5,10 @@
   <a class="knopf{{if .D.OffeneListe}} primaer{{end}}" href="/{{$a.R.Voll}}/issues">Offen</a>
   <a class="knopf{{if not .D.OffeneListe}} primaer{{end}}" href="/{{$a.R.Voll}}/issues?zu=ja">Geschlossen</a>
 </div>
+{{if .D.Meilensteine}}<div class="fortschritt">{{range .D.Meilensteine}}<a class="pille" href="/{{$a.R.Voll}}/issues?meilenstein={{.Name}}">{{.Name}}: {{.Fertig}} von {{.Gesamt}} fertig</a>{{end}}</div>{{end}}
 <table>
   {{range .D.Issues}}
-  <tr class="zeile"><td><a href="/{{$a.R.Voll}}/issues/{{.Nummer}}"><strong>{{.Titel}}</strong></a><div class="muted klein">#{{.Nummer}} von {{.Verfasser}} · {{datum .Erstellt}}{{if .Kommentare}} · {{.Kommentare}} Kommentare{{end}}</div></td></tr>
+  <tr class="zeile"><td><a href="/{{$a.R.Voll}}/issues/{{.Nummer}}"><strong>{{.Titel}}</strong></a><div class="muted klein">#{{.Nummer}} von {{.Verfasser}} · {{datum .Erstellt}}{{if .Kommentare}} · {{mehrzahl .Kommentare "Kommentar" "Kommentare"}}{{end}}{{if .Meilenstein}} · {{.Meilenstein}}{{end}}</div>{{range .Labels}}<a class="pille info" href="/{{$a.R.Voll}}/issues?label={{.}}">{{.}}</a> {{end}}</td></tr>
   {{else}}<tr><td class="muted">Keine Issues.</td></tr>{{end}}
 </table>
 <form method="post" action="/{{$a.R.Voll}}/issues" class="karte" style="margin-top:16px;max-width:760px">

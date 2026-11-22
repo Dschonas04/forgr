@@ -178,3 +178,23 @@ dl.eigenschaften dd { margin: 0; overflow-wrap: anywhere; }
 .readme pre { background: var(--bg); padding: 10px; border-radius: 6px; }
 .klonen { display: flex; gap: 6px; align-items: center; }
 .klonen input { font: 12px ui-monospace, Menlo, monospace; }
+.rechts { text-align: right; }
+.ohne-rand { margin: 0; overflow-wrap: anywhere; }
+.mr-neu { margin-top: 16px; }
+.fuss { margin: 14px 0 0; }
+.merge-stand { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.merge-stand form { margin-left: auto; }
+.plus-zahl { color: var(--gut); }
+.minus-zahl { color: var(--schlecht); }
+.dateiname { margin-right: auto; overflow-wrap: anywhere; }
+.znr { display: inline-block; width: 48px; padding-right: 10px; color: var(--muted); text-align: right; user-select: none; flex: none; }
+.review summary.z { white-space: pre; padding: 0 12px; display: block; cursor: pointer; }
+.review summary.z::-webkit-details-marker { display: none; }
+.zeilenform, .zkommentar { font-family: system-ui, sans-serif; padding: 10px 14px; background: var(--flaeche2); border-block: 1px solid var(--rand); white-space: normal; }
+.zeilenform textarea { min-height: 70px; margin-bottom: 8px; }
+.blame { background: var(--flaeche); border: 1px solid var(--rand); border-radius: var(--radius); overflow: auto; }
+.bz { display: flex; white-space: pre; }
+.bz.erste { border-top: 1px solid var(--rand); }
+.bwer { flex: none; width: 210px; padding-left: 10px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.btext { padding-right: 12px; }
+.fortschritt { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
