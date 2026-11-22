@@ -2,6 +2,7 @@
 
 ## Unveröffentlicht
 
+- Sicherheit: Der Push-Hook liegt bei den Repos statt in /tmp und wird vor jedem Push geprüft.
 - Pushes über 1 MB gehen.
 - Sicherheit: Sichtbarkeit setzt nur der Besitzer, Webhook-Hosts nur ASCII, ein Geheimnis je Hook, Push-Meldungen kommen aus git selbst.
 - Sicherheit: refs/replace abgelehnt, Review zeigt genau das Merge-Ergebnis, Dateinamen und Nachrichten können keinen Diff fälschen, Urteile nur am offenen Request, Refs werden exakt gelesen.

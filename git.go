@@ -417,7 +417,7 @@ func (a *App) git(w http.ResponseWriter, r *http.Request, besitzer, name, rest s
 		r.Body, r.ContentLength, r.TransferEncoding = f, n, nil
 	}
 	if schreiben && rest == "/git-receive-pack" {
-		ordner, err := hookOrdner()
+		ordner, err := hookOrdner(a.repos)
 		if err != nil {
 			log.Printf("push %s: %v", repo.Voll(), err)
 			verweigern(http.StatusInternalServerError, "Push geht gerade nicht")

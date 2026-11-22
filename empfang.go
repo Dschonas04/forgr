@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,17 +12,61 @@ import (
 
 // Was ein Push geändert hat, sagt git im post-receive. Ein Vergleich davor und
 // danach schriebe ihm auch zu, was jemand anderes inzwischen geändert hat.
-var hookOrdner = sync.OnceValues(func() (string, error) {
-	d, err := os.MkdirTemp("", "forgr-hooks-")
+const hookSkript = "#!/bin/sh\ncat >> \"$FORGR_PUSH\"\n"
+
+var hookSperre sync.Mutex
+
+// hookOrdner liegt bei den Repos, nicht in /tmp: was git ausführt, darf kein
+// anderer anlegen können. Geprüft wird vor jedem Push. Über HTTP ist er nicht
+// erreichbar, Namen dort beginnen nie mit einem Punkt.
+func hookOrdner(repos string) (string, error) {
+	hookSperre.Lock()
+	defer hookSperre.Unlock()
+	d, err := filepath.Abs(filepath.Join(repos, ".hooks"))
 	if err != nil {
 		return "", err
 	}
-	const skript = "#!/bin/sh\ncat >> \"$FORGR_PUSH\"\n"
-	if err := os.WriteFile(filepath.Join(d, "post-receive"), []byte(skript), 0o700); err != nil {
+	if err := os.Mkdir(d, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+		return "", err
+	}
+	st, err := os.Lstat(d)
+	if err != nil {
+		return "", err
+	}
+	if !st.IsDir() {
+		return "", errors.New("hook-Ordner ist kein Ordner")
+	}
+	if st.Mode().Perm() != 0o700 {
+		if err := os.Chmod(d, 0o700); err != nil {
+			return "", err
+		}
+	}
+	ziel := filepath.Join(d, "post-receive")
+	if st, err := os.Lstat(ziel); err == nil && st.Mode().IsRegular() && st.Mode().Perm() == 0o700 {
+		if b, err := os.ReadFile(ziel); err == nil && string(b) == hookSkript {
+			return d, nil
+		}
+	}
+	neu, err := os.CreateTemp(d, ".neu-")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(neu.Name())
+	_, err = neu.WriteString(hookSkript)
+	if e := neu.Close(); err == nil {
+		err = e
+	}
+	if err == nil {
+		err = os.Chmod(neu.Name(), 0o700)
+	}
+	if err == nil {
+		err = os.Rename(neu.Name(), ziel)
+	}
+	if err != nil {
 		return "", err
 	}
 	return d, nil
-})
+}
 
 // pushRefs liest die Zeilen "alt neu ref" des Hooks.
 func pushRefs(datei *os.File) ([]map[string]string, error) {
