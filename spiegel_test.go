@@ -18,6 +18,14 @@ func TestSpiegelEingabe(t *testing.T) {
 	}
 }
 
+func TestFetchRefs(t *testing.T) {
+	a, b, null := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("0", 40)
+	l := fetchRefs([]byte("  " + a + " " + b + " refs/heads/main\n! " + a + " " + b + " refs/heads/fest\n* " + null + " " + b + " refs/tags/v1\n= " + a + " " + a + " refs/heads/gleich\n"))
+	if len(l) != 2 || l[0]["ref"] != "refs/heads/main" || l[1]["vorher"] != "" || l[1]["nachher"] != b {
+		t.Errorf("%v", l)
+	}
+}
+
 func TestSpiegelUeberschreibtNicht(t *testing.T) {
 	d := t.TempDir()
 	stand := func(name string) string {

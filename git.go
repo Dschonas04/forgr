@@ -388,38 +388,68 @@ func (a *App) git(w http.ResponseWriter, r *http.Request, besitzer, name, rest s
 	if aus, err := exec.Command("git", "--exec-path").Output(); err == nil {
 		backend = filepath.Join(strings.TrimSpace(string(aus)), "git-http-backend")
 	}
-	h := &cgi.Handler{
-		Path: backend,
-		Dir:  a.repos,
-		Env: []string{
-			"GIT_PROJECT_ROOT=" + a.repos,
-			"GIT_HTTP_EXPORT_ALL=1",
-			"GIT_HTTP_MAX_REQUEST_BUFFER=100M",
-			"REMOTE_USER=" + wer.Name,
-			// refs/replace täuschte jedem Leser andere Inhalte vor.
-			"GIT_NO_REPLACE_OBJECTS=1",
-			"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=receive.hideRefs", "GIT_CONFIG_VALUE_0=refs/replace",
-			"HOME=" + os.Getenv("HOME"),
-		},
+	h := &cgi.Handler{Path: backend, Dir: a.repos}
+	konfig := [][2]string{{"receive.hideRefs", "refs/replace"}}
+	h.Env = []string{
+		"GIT_PROJECT_ROOT=" + a.repos,
+		"GIT_HTTP_EXPORT_ALL=1",
+		"GIT_HTTP_MAX_REQUEST_BUFFER=100M",
+		"REMOTE_USER=" + wer.Name,
+		// refs/replace täuschte jedem Leser andere Inhalte vor.
+		"GIT_NO_REPLACE_OBJECTS=1",
+		"HOME=" + os.Getenv("HOME"),
+	}
+	if len(r.TransferEncoding) > 0 {
+		grenze := int64(100 << 20)
+		if schreiben {
+			grenze = 2 << 30
+		}
+		f, n, err := aufPlatte(r.Body, grenze)
+		if errors.Is(err, errZuGross) {
+			verweigern(http.StatusRequestEntityTooLarge, "zu groß")
+			return
+		} else if err != nil {
+			log.Printf("git %s: %v", repo.Voll(), err)
+			verweigern(http.StatusBadRequest, "Anfrage unvollständig")
+			return
+		}
+		defer f.Close()
+		r.Body, r.ContentLength, r.TransferEncoding = f, n, nil
 	}
 	if schreiben && rest == "/git-receive-pack" {
-		p := a.pfad(repo.Besitzer, repo.Name)
-		vor, vorFehler := refStand(r.Context(), p)
+		ordner, err := hookOrdner()
+		if err != nil {
+			log.Printf("push %s: %v", repo.Voll(), err)
+			verweigern(http.StatusInternalServerError, "Push geht gerade nicht")
+			return
+		}
+		meldung, err := os.CreateTemp("", "forgr-push-")
+		if err != nil {
+			log.Printf("push %s: %v", repo.Voll(), err)
+			verweigern(http.StatusInternalServerError, "Push geht gerade nicht")
+			return
+		}
+		konfig = append(konfig, [2]string{"core.hooksPath", ordner})
+		h.Env = append(h.Env, "FORGR_PUSH="+meldung.Name())
 		defer func() {
+			defer os.Remove(meldung.Name())
+			defer meldung.Close()
 			ctx, ende := context.WithTimeout(context.WithoutCancel(r.Context()), 20*time.Second)
 			defer ende()
 			if _, err := a.db.Exec(ctx, `UPDATE repos SET geaendert=now() WHERE id::text=$1`, repo.ID); err != nil {
 				log.Printf("push %s: %v", repo.Voll(), err)
 			}
-			if vorFehler != nil {
-				return
-			}
-			if nach, err := refStand(ctx, p); err == nil {
-				if l := refAenderungen(vor, nach); len(l) > 0 {
-					a.melden(repo, "push", wer.Name, map[string]any{"refs": l})
-				}
+			if l, err := pushRefs(meldung); err != nil {
+				log.Printf("push %s: %v", repo.Voll(), err)
+			} else if len(l) > 0 {
+				a.melden(repo, "push", wer.Name, map[string]any{"refs": l})
 			}
 		}()
+	}
+	h.Env = append(h.Env, "GIT_CONFIG_COUNT="+strconv.Itoa(len(konfig)))
+	for i, k := range konfig {
+		n := strconv.Itoa(i)
+		h.Env = append(h.Env, "GIT_CONFIG_KEY_"+n+"="+k[0], "GIT_CONFIG_VALUE_"+n+"="+k[1])
 	}
 	h.ServeHTTP(w, r)
 }

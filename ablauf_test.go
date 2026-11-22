@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -253,9 +257,14 @@ func TestAblaufMitGit(t *testing.T) {
 	}
 
 	// Webhook, Commit-Status, Gruppe.
-	empfangen := make(chan string, 4)
+	type meldung struct{ ereignis, signatur, inhalt string }
+	empfangen := make(chan meldung, 8)
 	ziel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		empfangen <- r.Header.Get("X-Forgr-Ereignis") + " " + r.Header.Get("X-Forgr-Signatur")
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			return
+		}
+		empfangen <- meldung{r.Header.Get("X-Forgr-Ereignis"), r.Header.Get("X-Forgr-Signatur"), string(b)}
 	}))
 	defer ziel.Close()
 	a.hooks = neueHooks(ziel.URL, "testgeheimnis")
@@ -269,8 +278,20 @@ func TestAblaufMitGit(t *testing.T) {
 	git("push", u.String(), "main")
 	select {
 	case e := <-empfangen:
-		if !strings.HasPrefix(e, "push sha256=") {
-			t.Errorf("Webhook: %q", e)
+		var id string
+		if err := db.QueryRow(ctx, `SELECT id::text FROM webhooks`).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		mac := func(schluessel, text string) string {
+			m := hmac.New(sha256.New, []byte(schluessel))
+			m.Write([]byte(text))
+			return hex.EncodeToString(m.Sum(nil))
+		}
+		if e.ereignis != "push" || !strings.Contains(e.inhalt, `"refs/heads/main"`) || !strings.Contains(e.inhalt, `"anna"`) {
+			t.Errorf("Webhook: %+v", e)
+		}
+		if e.signatur != "sha256="+mac(mac("testgeheimnis", "forgr-webhook:"+id), e.inhalt) {
+			t.Error("Webhook hat kein eigenes Geheimnis")
 		}
 	case <-time.After(10 * time.Second):
 		t.Error("kein Webhook nach dem Push")
@@ -279,6 +300,33 @@ func TestAblaufMitGit(t *testing.T) {
 	stand, err := zweigStand(ctx, bare, "main")
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Was während eines Pushs jemand anderes ändert, ist nicht dessen Push.
+	lesen, schreiben := io.Pipe()
+	go func() {
+		time.Sleep(time.Second)
+		if _, err := gitAus(ctx, bare, "update-ref", "refs/tags/fremd", stand); err != nil {
+			t.Error(err)
+		}
+		_, err := schreiben.Write([]byte("0000"))
+		schreiben.CloseWithError(err)
+	}()
+	push, err := http.NewRequest("POST", s.URL+"/anna/probe.git/git-receive-pack", lesen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	push.ContentLength = 4
+	push.SetBasicAuth("anna", "nur-fuer-den-test-anna")
+	push.Header.Set("Content-Type", "application/x-git-receive-pack-request")
+	if res, err := klient.Do(push); err != nil {
+		t.Error(err)
+	} else {
+		res.Body.Close()
+	}
+	select {
+	case e := <-empfangen:
+		t.Errorf("fremde Änderung zugeschrieben: %s", e.inhalt)
+	case <-time.After(3 * time.Second):
 	}
 	melde := func(name, tok string) int {
 		r, err := http.NewRequest("POST", s.URL+"/api/repos/anna/probe/status/"+stand, strings.NewReader(`{"zustand":"success","name":"bau"}`))
@@ -340,6 +388,62 @@ func TestAblaufMitGit(t *testing.T) {
 		if code, b := ruf("GET", p, nil); code != 200 || !strings.Contains(b, "</html>") {
 			t.Errorf("%s: %d", p, code)
 		}
+	}
+
+	// git schickt ab 1 MB stückweise.
+	zufall := make([]byte, 3<<20)
+	if _, err := rand.Read(zufall); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(d, "gross.bin"), zufall, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "gross.bin")
+	git("commit", "-m", "gross")
+	gross := exec.Command("git", "-c", "credential.helper=", "push", u.String(), "main")
+	gross.Dir, gross.Env = d, append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_CONFIG_GLOBAL="+os.DevNull)
+	if aus, err := gross.CombinedOutput(); err != nil {
+		t.Errorf("großer Push: %v %s", err, aus)
+	}
+
+	// Verwalter speichert, während der Besitzer das Repo schließt.
+	token("vera")
+	if _, err := db.Exec(ctx, `INSERT INTO rechte (repo, konto, recht) SELECT r.id, k.id, 'verwalten' FROM repos r, konten k WHERE r.name='probe' AND k.name='vera'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(ctx, `UPDATE repos SET privat=false WHERE name='probe'`); err != nil {
+		t.Fatal(err)
+	}
+	vera := ssoKonto{Name: "vera", Hash: ssoPasswortHash("nur-fuer-den-test")}
+	a.sso.konten = append(a.sso.konten, vera)
+	veraRec := httptest.NewRecorder()
+	a.sso.lokalAnmelden(veraRec, httptest.NewRequest("POST", "/", nil), vera)
+	annas := kekse
+	kekse = append(veraRec.Result().Cookies(), &http.Cookie{Name: "formular", Value: strings.Repeat("a", 32)})
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE repos SET privat=true WHERE name='probe'`); err != nil {
+		t.Fatal(err)
+	}
+	fertig := make(chan int, 1)
+	go func() {
+		code, _ := ruf("POST", "/anna/probe/einstellungen", url.Values{"beschreibung": {"von vera"}})
+		fertig <- code
+	}()
+	time.Sleep(time.Second)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if code := <-fertig; code != http.StatusSeeOther {
+		t.Errorf("Verwalterin speichert nicht: %d", code)
+	}
+	kekse = annas
+	var privat bool
+	var text string
+	if err := db.QueryRow(ctx, `SELECT privat, beschreibung FROM repos WHERE name='probe'`).Scan(&privat, &text); err != nil || !privat || text != "von vera" {
+		t.Errorf("Sichtbarkeit zurückgedreht: %v %q %v", privat, text, err)
 	}
 
 	if _, b := ruf("GET", "/neu", nil); strings.Contains(b, "anonymes Klonen") {

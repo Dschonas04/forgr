@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"log"
@@ -43,7 +44,7 @@ func spiegelListe(s string) []Spiegel {
 func (s Spiegel) befehl() []string {
 	refs := []string{s.Adresse, "refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"}
 	if s.Richtung == "pull" {
-		return slices.Concat([]string{"fetch", "--no-auto-maintenance", "--no-write-fetch-head", "--no-prune", "--no-tags", "--"}, refs)
+		return slices.Concat([]string{"fetch", "--porcelain", "--no-auto-maintenance", "--no-write-fetch-head", "--no-prune", "--no-tags", "--"}, refs)
 	}
 	return slices.Concat([]string{"push", "--"}, refs)
 }
@@ -87,19 +88,19 @@ func (a *App) spiegeln(ctx context.Context, s Spiegel, host, token string) {
 		return
 	}
 	p := a.pfad(repo.Besitzer, repo.Name)
-	vor, vorFehler := refStand(ctx, p)
 	cmd := exec.CommandContext(ctx, "git", slices.Concat([]string{"-C", p,
 		"-c", "protocol.allow=never", "-c", "protocol.https.allow=always", "-c", "http.followRedirects=false", "-c", "credential.helper=",
 	}, s.befehl())...)
 	cmd.Env = spiegelUmgebung(s, host, token)
-	if aus, err := cmd.CombinedOutput(); err != nil {
-		log.Printf("spiegel %s %s: %s", repo.Voll(), s.Richtung, kurz(string(aus)))
+	var fehler bytes.Buffer
+	cmd.Stderr = &fehler
+	aus, err := cmd.Output()
+	if err != nil {
+		log.Printf("spiegel %s %s: %s", repo.Voll(), s.Richtung, kurz(fehler.String()))
 	}
-	if s.Richtung != "pull" || vorFehler != nil {
-		return
-	}
-	if nach, err := refStand(ctx, p); err == nil {
-		if l := refAenderungen(vor, nach); len(l) > 0 {
+	// Auch nach einem Fehler: was durchkam, steht in der Ausgabe.
+	if s.Richtung == "pull" {
+		if l := fetchRefs(aus); len(l) > 0 {
 			a.melden(repo, "push", "spiegel", map[string]any{"refs": l})
 		}
 	}

@@ -31,7 +31,7 @@
 <h2>Webhooks</h2>
 {{range .D.Hooks}}<form method="post" action="/{{$a.R.Voll}}/webhook" class="filter">
   <input type="hidden" name="token" value="{{$t}}"><input type="hidden" name="id" value="{{.ID}}">
-  <span class="code">{{.Adresse}}</span>{{if .Stand}}<span class="pille">{{.Stand}}</span>{{end}}<button class="gefahr klein">Entfernen</button></form>{{end}}
+  <span class="code">{{.Adresse}}</span>{{if .Stand}}<span class="pille">{{.Stand}}</span>{{end}}<button class="gefahr klein">Entfernen</button>{{if .Geheimnis}}<details><summary class="klein">Geheimnis</summary><span class="code klein">{{.Geheimnis}}</span></details>{{end}}</form>{{end}}
 {{if .D.HooksAn}}<form method="post" action="/{{$a.R.Voll}}/webhook" class="filter">
   <input type="hidden" name="token" value="{{$t}}"><input type="url" name="adresse" placeholder="https://host/pfad" aria-label="Adresse" required><button>Hinzufügen</button></form>
 {{else}}<p class="muted klein">Aus. Der Betreiber gibt Ziele mit <span class="code">FORGR_WEBHOOK_ZIELE</span> frei.</p>{{end}}

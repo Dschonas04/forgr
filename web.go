@@ -453,6 +453,9 @@ func (a *App) einstellungen(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Datenbank", http.StatusInternalServerError)
 		return
 	}
+	for i := range hooks {
+		hooks[i].Geheimnis = a.hooks.schluessel(hooks[i].ID)
+	}
 	a.v.zeigen(w, r, "einstellungen", a.daten(r, "Einstellungen · "+repo.Voll(), "", map[string]any{
 		"A": a.ansicht(r, repo, recht, "", ""), "Mitglieder": l,
 		"Besitzer": ich.ID == repo.BesitzerID, "Teams": teams, "Hooks": hooks, "HooksAn": a.hooks.an()}))
@@ -493,12 +496,10 @@ func (a *App) einstellungenSpeichern(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	privat := repo.Privat
-	if ich.ID == repo.BesitzerID { // wer sieht es: das entscheidet der Besitzer
-		privat = r.FormValue("oeffentlich") != "ja"
-	}
-	if _, err := a.db.Exec(r.Context(), `UPDATE repos SET beschreibung=$2, privat=$3 WHERE id::text=$1`,
-		repo.ID, strings.TrimSpace(r.FormValue("beschreibung")), privat); err != nil {
+	// Wer es sieht, entscheidet der Besitzer. Bei allen anderen bleibt die Spalte,
+	// wie sie in der Datenbank steht, nicht wie sie eben gelesen wurde.
+	if _, err := a.db.Exec(r.Context(), `UPDATE repos SET beschreibung=$2, privat = CASE WHEN $3 THEN $4 ELSE privat END WHERE id::text=$1`,
+		repo.ID, strings.TrimSpace(r.FormValue("beschreibung")), ich.ID == repo.BesitzerID, r.FormValue("oeffentlich") != "ja"); err != nil {
 		zurueck(w, r, "/"+repo.Voll()+"/einstellungen", "Nicht gespeichert")
 		return
 	}

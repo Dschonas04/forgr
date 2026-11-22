@@ -21,6 +21,7 @@ import (
 
 type Webhook struct {
 	ID, Adresse, Stand string
+	Geheimnis          string // nur für die Einstellungen
 	Zuletzt            *time.Time
 }
 
@@ -35,6 +36,13 @@ func herkunft(roh string) string {
 	u, err := url.Parse(strings.TrimSpace(roh))
 	if err != nil || u.Hostname() == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return ""
+	}
+	// Nur ASCII: ToLower und der Transport normalisieren sonst verschieden, und
+	// geprüft wäre ein anderer Host als der angerufene.
+	for _, b := range []byte(u.Host) {
+		if b <= ' ' || b >= 0x7f || b == '%' {
+			return ""
+		}
 	}
 	port := u.Port()
 	if port == "" {
@@ -68,6 +76,17 @@ func (h *Hooks) erlaubt(adresse string) bool {
 }
 
 func (h *Hooks) an() bool { return h != nil && len(h.ziele) > 0 }
+
+// schluessel leitet je Hook einen eigenen ab: wer einen Hook verwaltet, kann
+// damit keine Meldung eines anderen unterschreiben.
+func (h *Hooks) schluessel(id string) string {
+	if h == nil || h.geheim == "" {
+		return ""
+	}
+	m := hmac.New(sha256.New, []byte(h.geheim))
+	m.Write([]byte("forgr-webhook:" + id))
+	return hex.EncodeToString(m.Sum(nil))
+}
 
 func (a *App) webhooksVon(ctx context.Context, repo string) ([]Webhook, error) {
 	rows, err := a.db.Query(ctx, `SELECT id::text, adresse, stand, zuletzt FROM webhooks WHERE repo=$1::uuid ORDER BY adresse`, repo)
@@ -112,7 +131,7 @@ func (a *App) melden(repo Repo, ereignis, wer string, daten map[string]any) {
 			return
 		}
 		for _, x := range l {
-			stand := a.hooks.senden(ctx, x.Adresse, ereignis, b)
+			stand := a.hooks.senden(ctx, x, ereignis, b)
 			if _, err := a.db.Exec(ctx, `UPDATE webhooks SET stand=$2, zuletzt=now() WHERE id::text=$1`, x.ID, stand); err != nil {
 				log.Printf("webhook %s: %v", repo.Voll(), err)
 			}
@@ -120,7 +139,8 @@ func (a *App) melden(repo Repo, ereignis, wer string, daten map[string]any) {
 	}()
 }
 
-func (h *Hooks) senden(ctx context.Context, adresse, ereignis string, b []byte) string {
+func (h *Hooks) senden(ctx context.Context, x Webhook, ereignis string, b []byte) string {
+	adresse := x.Adresse
 	if !h.erlaubt(adresse) {
 		return "Ziel nicht erlaubt"
 	}
@@ -130,8 +150,8 @@ func (h *Hooks) senden(ctx context.Context, adresse, ereignis string, b []byte) 
 	}
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("X-Forgr-Ereignis", ereignis)
-	if h.geheim != "" {
-		m := hmac.New(sha256.New, []byte(h.geheim))
+	if k := h.schluessel(x.ID); k != "" {
+		m := hmac.New(sha256.New, []byte(k))
 		m.Write(b)
 		r.Header.Set("X-Forgr-Signatur", "sha256="+hex.EncodeToString(m.Sum(nil)))
 	}
@@ -141,37 +161,6 @@ func (h *Hooks) senden(ctx context.Context, adresse, ereignis string, b []byte) 
 	}
 	defer res.Body.Close()
 	return fmt.Sprintf("HTTP %d", res.StatusCode)
-}
-
-// refStand: jeder Zweig und Tag mit seinem Objekt, zum Vergleich um einen Push.
-func refStand(ctx context.Context, repo string) (map[string]string, error) {
-	aus, err := gitAus(ctx, repo, "for-each-ref", "--format=%(objectname) %(refname)", "refs/heads", "refs/tags")
-	if err != nil {
-		return nil, err
-	}
-	m := map[string]string{}
-	for _, z := range strings.Split(string(aus), "\n") {
-		if sha, ref, ok := strings.Cut(z, " "); ok {
-			m[ref] = sha
-		}
-	}
-	return m, nil
-}
-
-func refAenderungen(vor, nach map[string]string) []map[string]string {
-	var l []map[string]string
-	for ref, neu := range nach {
-		if vor[ref] != neu {
-			l = append(l, map[string]string{"ref": ref, "vorher": vor[ref], "nachher": neu})
-		}
-	}
-	for ref, alt := range vor {
-		if _, da := nach[ref]; !da {
-			l = append(l, map[string]string{"ref": ref, "vorher": alt, "nachher": ""})
-		}
-	}
-	slices.SortFunc(l, func(x, y map[string]string) int { return strings.Compare(x["ref"], y["ref"]) })
-	return l
 }
 
 func (a *App) webhookAendern(w http.ResponseWriter, r *http.Request) {

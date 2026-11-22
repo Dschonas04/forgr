@@ -38,7 +38,8 @@ Zustände: `pending`, `success`, `failure`, `error`.
 ## Webhooks und Spiegel
 
 Beides ist aus, bis es in der `.env` steht, siehe `.env.beispiel`. Webhooks
-gehen nur an freigegebene Hosts. Spiegel überschreiben und löschen nichts.
+gehen nur an freigegebene Hosts. Jeder Hook hat sein eigenes Geheimnis (in den
+Einstellungen des Repositorys), `X-Forgr-Signatur` ist HMAC-SHA256 über den Inhalt. Spiegel überschreiben und löschen nichts.
 
 ## Grenzen
 
