@@ -38,6 +38,7 @@ func main() {
 	}
 	a.admins = adminListe(umgebung("FORGR_ADMIN", ""))
 	a.sso.ErstesKonto = a.ersterAdmin
+	a.sso.KontoWeg = a.adminEntziehen
 	a.sso.Frei = []string{"/statisch/", "/healthz"}
 	// git über HTTPS meldet sich mit Zugriffstoken an, nicht mit Sitzung.
 	a.sso.Durchlass = func(r *http.Request) bool { return gitPfad.MatchString(r.URL.Path) }
@@ -116,6 +117,9 @@ func (a *App) wege() http.Handler {
 
 func (a *App) angemeldet(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !inhaltZuerst(w, r) {
+			return
+		}
 		// Anmeldung und Konten verwalten nur Admins; vor der Einrichtung, wer
 		// den Code aus dem Log hat.
 		if !a.sso.Geschuetzt() && a.sso.EinrichtungErlaubt(w, r) {
