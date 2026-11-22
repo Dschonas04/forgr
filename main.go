@@ -19,10 +19,11 @@ import (
 )
 
 type App struct {
-	db    *pgxpool.Pool
-	sso   *SSO
-	v     Vorlagen
-	repos string
+	admins []string // Vorgabe des Betreibers
+	db     *pgxpool.Pool
+	sso    *SSO
+	v      Vorlagen
+	repos  string
 }
 
 func main() {
@@ -35,6 +36,8 @@ func main() {
 		v:     ladeVorlagen(),
 		repos: umgebung("FORGR_REPOS", "./repos"),
 	}
+	a.admins = adminListe(umgebung("FORGR_ADMIN", ""))
+	a.sso.ErstesKonto = a.ersterAdmin
 	a.sso.Frei = []string{"/statisch/", "/healthz"}
 	// git über HTTPS meldet sich mit Zugriffstoken an, nicht mit Sitzung.
 	a.sso.Durchlass = func(r *http.Request) bool { return gitPfad.MatchString(r.URL.Path) }
