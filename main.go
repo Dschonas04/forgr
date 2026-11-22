@@ -113,17 +113,27 @@ func (a *App) wege() http.Handler {
 
 func (a *App) angemeldet(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := a.sso.Wer(r); ok || (!a.sso.Geschuetzt() && a.sso.EinrichtungErlaubt(w, r)) {
+		// Anmeldung und Konten verwalten nur Admins; vor der Einrichtung, wer
+		// den Code aus dem Log hat.
+		if !a.sso.Geschuetzt() && a.sso.EinrichtungErlaubt(w, r) {
 			h(w, r)
 			return
 		}
-		http.Error(w, "Bitte anmelden", http.StatusUnauthorized)
+		if _, ok := a.sso.Wer(r); !ok {
+			http.Error(w, "Bitte anmelden", http.StatusUnauthorized)
+			return
+		}
+		if !a.istAdmin(r) {
+			http.Error(w, "Nur für Admins", http.StatusForbidden)
+			return
+		}
+		h(w, r)
 	}
 }
 
 func (a *App) daten(r *http.Request, titel, nav string, d any) Daten {
 	n, _ := a.sso.Wer(r)
-	return Daten{App: "Forgr", Titel: titel, Nav: nav, Nutzer: n, D: d}
+	return Daten{App: "Forgr", Titel: titel, Nav: nav, Nutzer: n, Admin: a.istAdmin(r), D: d}
 }
 
 func basis(r *http.Request) string {
