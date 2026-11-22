@@ -28,6 +28,7 @@ type App struct {
 	sso        *SSO
 	v          Vorlagen
 	repos      string
+	hooks      *Hooks
 }
 
 func main() {
@@ -49,6 +50,10 @@ func main() {
 	if err := os.MkdirAll(a.repos, 0o750); err != nil {
 		log.Fatalf("Repos: %v", err)
 	}
+
+	a.hooks = neueHooks(umgebung("FORGR_WEBHOOK_ZIELE", ""), umgebung("FORGR_WEBHOOK_GEHEIMNIS", ""))
+	go a.spiegelLauf(ctx, spiegelListe(umgebung("FORGR_SPIEGEL", "")),
+		umgebung("FORGR_SPIEGEL_HOST", "github.com"), umgebung("FORGR_SPIEGEL_TOKEN", ""))
 
 	adresse := ":" + umgebung("FORGR_PORT", "8380")
 	srv := &http.Server{Addr: adresse, Handler: a.wege(), ReadHeaderTimeout: 10 * time.Second}
@@ -78,6 +83,8 @@ func (a *App) wege() http.Handler {
 	m.HandleFunc("GET /{$}", a.start)
 	m.HandleFunc("GET /neu", a.neuFormular)
 	m.HandleFunc("POST /neu", a.neuAnlegen)
+	m.HandleFunc("GET /gruppen", a.gruppenSeite)
+	m.HandleFunc("POST /gruppen", a.gruppeAendern)
 	m.HandleFunc("GET /tokens", a.tokens)
 	m.HandleFunc("POST /tokens", a.tokenAnlegen)
 	m.HandleFunc("POST /tokens/{id}/loeschen", a.tokenLoeschen)
@@ -94,6 +101,8 @@ func (a *App) wege() http.Handler {
 	rm.HandleFunc("GET /{b}/{r}/einstellungen", a.einstellungen)
 	rm.HandleFunc("POST /{b}/{r}/einstellungen", a.einstellungenSpeichern)
 	rm.HandleFunc("POST /{b}/{r}/mitglied", a.mitgliedSetzen)
+	rm.HandleFunc("POST /{b}/{r}/team", a.teamRecht)
+	rm.HandleFunc("POST /{b}/{r}/webhook", a.webhookAendern)
 	rm.HandleFunc("POST /{b}/{r}/loeschen", a.repoLoeschen)
 	rm.HandleFunc("GET /{b}/{r}/issues", a.issues)
 	rm.HandleFunc("POST /{b}/{r}/issues/{n}/einordnen", a.issueEinordnen)
@@ -113,7 +122,7 @@ func (a *App) wege() http.Handler {
 	m.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		erstes := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/"), "/", 2)[0]
 		switch erstes {
-		case "statisch", "sso", "api", "neu", "tokens", "healthz":
+		case "statisch", "sso", "api", "neu", "tokens", "gruppen", "healthz":
 			http.NotFound(w, r)
 			return
 		}
@@ -123,6 +132,10 @@ func (a *App) wege() http.Handler {
 	return sicherheitskopf(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if t := gitPfad.FindStringSubmatch(r.URL.Path); t != nil {
 			a.git(w, r, t[1], t[2], t[3])
+			return
+		}
+		if t := statusPfad.FindStringSubmatch(r.URL.Path); t != nil {
+			a.statusMelden(w, r, t[1], t[2], t[3])
 			return
 		}
 		app.ServeHTTP(w, r)
@@ -200,5 +213,5 @@ var nameMuster = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 
 func gueltigerName(n string) bool {
 	return nameMuster.MatchString(n) && !strings.HasSuffix(n, ".git") && !strings.Contains(n, "..") &&
-		n != "neu" && n != "tokens" && n != "statisch" && n != "sso" && n != "api"
+		n != "neu" && n != "tokens" && n != "statisch" && n != "sso" && n != "api" && n != "gruppen"
 }

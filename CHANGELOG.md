@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- Sicherheit: refs/replace abgelehnt, Review zeigt genau das Merge-Ergebnis, Dateinamen und Nachrichten können keinen Diff fälschen, Urteile nur am offenen Request, Refs werden exakt gelesen.
+- Gruppen, Recht "verwalten", Webhooks auf freigegebene Ziele, Commit-Status für CI, Spiegel über https.
 - Reiter Commits führt wieder zum Standardzweig, kein toter Verweis mehr am Besitzer.
 - Sicherheit: Zweige, Tags und Commits werden eindeutig aufgelöst, ein Tag kann keinen Zweig und keinen Commit überdecken.
 - Merge-Requests mit Review, Zeilenkommentaren und Zusammenführen, Blame, Releases, Labels und Meilensteine.

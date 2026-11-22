@@ -1,0 +1,18 @@
+{{define "inhalt"}}{{$t := .Token}}
+<div class="leiste"><h1>Gruppen</h1></div>
+<div class="verlauf">
+{{range .D.Teams}}{{$id := .ID}}
+<section class="karte">
+  <div class="leiste"><h2 class="ohne-rand">{{.Name}}</h2>
+    <form method="post" action="/gruppen" data-frage="Gruppe mit ihren Rechten löschen?"><input type="hidden" name="token" value="{{$t}}"><input type="hidden" name="id" value="{{.ID}}"><button class="gefahr klein" name="aktion" value="loeschen">Löschen</button></form></div>
+  <div class="fortschritt">
+  {{range .Mitglieder}}<form method="post" action="/gruppen" class="inline"><input type="hidden" name="token" value="{{$t}}"><input type="hidden" name="id" value="{{$id}}"><input type="hidden" name="name" value="{{.}}"><span class="pille">{{.}}</span> <button class="klein" name="aktion" value="weg" aria-label="{{.}} entfernen">Entfernen</button></form>
+  {{else}}<span class="muted">Noch keine Mitglieder.</span>{{end}}
+  </div>
+  <form method="post" action="/gruppen" class="filter"><input type="hidden" name="token" value="{{$t}}"><input type="hidden" name="id" value="{{.ID}}"><input type="text" name="name" placeholder="Kontoname" aria-label="Kontoname" required><button name="aktion" value="dazu">Hinzufügen</button></form>
+</section>
+{{else}}<div class="leer"><strong>Noch keine Gruppen</strong>Eine Gruppe bekommt an deinen Repositories ein Recht für alle ihre Mitglieder.</div>{{end}}
+</div>
+<form method="post" action="/gruppen" class="karte filter mr-neu"><input type="hidden" name="token" value="{{$t}}"><input type="text" name="name" placeholder="Name der neuen Gruppe" aria-label="Name" maxlength="60" required><button class="primaer">Anlegen</button></form>
+{{end}}
+{{define "skripte"}}<script src="/statisch/verwalten.js" defer></script>{{end}}

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -181,11 +182,15 @@ func TestAblaufMitGit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ruf("POST", "/anna/probe/mr/1/zusammen", url.Values{"sha": {vorMerge}})
+	ruf("POST", "/anna/probe/mr/1/zusammen", url.Values{"sha": {vorMerge}, "ziel_sha": {vorMerge}})
 	if jetzt, err := zweigStand(ctx, bare, "main"); err != nil || jetzt != vorMerge {
 		t.Error("Merge mit veraltetem Stand")
 	}
-	ruf("POST", "/anna/probe/mr/1/zusammen", url.Values{"sha": {qs}})
+	ruf("POST", "/anna/probe/mr/1/zusammen", url.Values{"sha": {qs}, "ziel_sha": {qs}})
+	if jetzt, err := zweigStand(ctx, bare, "main"); err != nil || jetzt != vorMerge {
+		t.Error("Merge auf ein anderes Ziel als das angesehene")
+	}
+	ruf("POST", "/anna/probe/mr/1/zusammen", url.Values{"sha": {qs}, "ziel_sha": {vorMerge}})
 	if b, err := inhalt(ctx, bare, "main", "a.sql"); err != nil || !strings.HasPrefix(string(b), "++ neue Zeile") {
 		t.Errorf("Merge nicht angekommen: %v", err)
 	}
@@ -227,6 +232,116 @@ func TestAblaufMitGit(t *testing.T) {
 			t.Errorf("Seite %q: %d", p, code)
 		}
 	}
+	// Ein Urteil gibt es nur am offenen Request, refs/replace nimmt niemand an.
+	if _, err := db.Exec(ctx, `UPDATE mrs SET verfasser=(SELECT id FROM konten WHERE name='leser') WHERE nummer=2`); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []url.Values{
+		{"art": {"zustimmung"}, "zustand": {"zu"}, "sha": {qs}},
+		{"art": {"zustimmung"}, "sha": {qs}},
+	} {
+		ruf("POST", "/anna/probe/mr/2", f)
+	}
+	var urteile int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM mr_beitraege WHERE art='zustimmung'`).Scan(&urteile); err != nil || urteile != 0 {
+		t.Errorf("Urteil am geschlossenen Request: %d %v", urteile, err)
+	}
+	ersatz := exec.Command("git", "-c", "credential.helper=", "push", u.String(), "main:refs/replace/"+qs)
+	ersatz.Dir, ersatz.Env = d, append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_CONFIG_GLOBAL="+os.DevNull)
+	if ersatz.Run() == nil {
+		t.Error("refs/replace angenommen")
+	}
+
+	// Webhook, Commit-Status, Gruppe.
+	empfangen := make(chan string, 4)
+	ziel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		empfangen <- r.Header.Get("X-Forgr-Ereignis") + " " + r.Header.Get("X-Forgr-Signatur")
+	}))
+	defer ziel.Close()
+	a.hooks = neueHooks(ziel.URL, "testgeheimnis")
+	ruf("POST", "/anna/probe/webhook", url.Values{"adresse": {"http://169.254.169.254/latest"}})
+	ruf("POST", "/anna/probe/webhook", url.Values{"adresse": {ziel.URL + "/hook"}})
+	var anzahl int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM webhooks`).Scan(&anzahl); err != nil || anzahl != 1 {
+		t.Errorf("Webhook-Ziele: %d %v", anzahl, err)
+	}
+	git("commit", "--allow-empty", "-m", "fuer den Hook")
+	git("push", u.String(), "main")
+	select {
+	case e := <-empfangen:
+		if !strings.HasPrefix(e, "push sha256=") {
+			t.Errorf("Webhook: %q", e)
+		}
+	case <-time.After(10 * time.Second):
+		t.Error("kein Webhook nach dem Push")
+	}
+
+	stand, err := zweigStand(ctx, bare, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	melde := func(name, tok string) int {
+		r, err := http.NewRequest("POST", s.URL+"/api/repos/anna/probe/status/"+stand, strings.NewReader(`{"zustand":"success","name":"bau"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if name != "" {
+			r.SetBasicAuth(name, tok)
+		} else {
+			for _, c := range kekse {
+				r.AddCookie(c)
+			}
+		}
+		res, err := klient.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if c := melde("leser", leser); c != http.StatusForbidden {
+		t.Errorf("Leser meldet Status: %d", c)
+	}
+	if c := melde("", ""); c != http.StatusUnauthorized {
+		t.Errorf("Status mit Sitzung: %d", c)
+	}
+	if c := melde("anna", "nur-fuer-den-test-anna"); c != http.StatusOK {
+		t.Errorf("Status: %d", c)
+	}
+	if _, b := ruf("GET", "/anna/probe/commit/"+stand, nil); !strings.Contains(b, "bau: erfolgreich") {
+		t.Error("Status fehlt am Commit")
+	}
+
+	ruf("POST", "/gruppen", url.Values{"name": {"Team"}})
+	var team string
+	if err := db.QueryRow(ctx, `SELECT id::text FROM teams`).Scan(&team); err != nil {
+		t.Fatal(err)
+	}
+	ruf("POST", "/gruppen", url.Values{"id": {team}, "aktion": {"dazu"}, "name": {"leser"}})
+	ruf("POST", "/anna/probe/team", url.Values{"team": {team}, "recht": {"schreiben"}})
+	if c := melde("leser", leser); c != http.StatusOK {
+		t.Errorf("Gruppe schreibt nicht: %d", c)
+	}
+	// Eine fremde Gruppe öffnet nichts, auch mit Eintrag in der Datenbank.
+	fremd := token("fremd")
+	if _, err := db.Exec(ctx, `WITH t AS (INSERT INTO teams (besitzer, name) SELECT id, 'Fremd' FROM konten WHERE name='fremd' RETURNING id, besitzer),
+		m AS (INSERT INTO team_mitglieder (team, konto) SELECT id, besitzer FROM t)
+		INSERT INTO team_rechte (repo, team, recht) SELECT r.id, t.id, 'verwalten' FROM repos r, t WHERE r.name='probe'`); err != nil {
+		t.Fatal(err)
+	}
+	if c := melde("fremd", fremd); c != http.StatusNotFound {
+		t.Errorf("fremde Gruppe öffnet das Repo: %d", c)
+	}
+	ruf("POST", "/anna/probe/team", url.Values{"team": {team}})
+	if c := melde("leser", leser); c != http.StatusForbidden {
+		t.Errorf("entzogene Gruppe schreibt weiter: %d", c)
+	}
+	for _, p := range []string{"/gruppen", "/anna/probe/einstellungen"} {
+		if code, b := ruf("GET", p, nil); code != 200 || !strings.Contains(b, "</html>") {
+			t.Errorf("%s: %d", p, code)
+		}
+	}
+
 	if _, b := ruf("GET", "/neu", nil); strings.Contains(b, "anonymes Klonen") {
 		t.Error("Oberfläche verspricht anonymes Klonen")
 	}

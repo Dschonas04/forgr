@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/cgi"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -187,15 +189,20 @@ func commitMitDiff(ctx context.Context, repo, sha string) (Commit, []DiffDatei, 
 	if err != nil {
 		return Commit{}, nil, err
 	}
-	aus, err := gitAus(ctx, repo, "show", "--no-ext-diff", "--no-textconv", "--format=%H%x1f%an%x1f%ae%x1f%at%x1f%s%x1f%b%x1e", "--patch", "--no-color", "-M", "--end-of-options", sha, "--")
+	// Nachricht und Diff getrennt holen: in der Nachricht kann jedes Trennzeichen stehen.
+	aus, err := gitAus(ctx, repo, "show", "-s", "--format=%H%x1f%at%x1f%an%x1f%ae%x1f%s%x1f%b", "--end-of-options", sha, "--")
 	if err != nil {
 		return Commit{}, nil, err
 	}
-	kopf, rest, _ := bytes.Cut(aus, []byte("\x1e"))
-	f := strings.SplitN(string(kopf), "\x1f", 6)
+	rest, err := gitAus(ctx, repo, "show", "--format=", "--no-ext-diff", "--no-textconv", "--patch", "--no-color", "-M", "--end-of-options", sha, "--")
+	if err != nil {
+		return Commit{}, nil, err
+	}
+	f := strings.SplitN(string(aus), "\x1f", 6)
 	if len(f) < 6 || len(f[0]) < 8 {
 		return Commit{}, nil, errors.New("Commit unlesbar")
 	}
+	f[1], f[2], f[3] = f[2], f[3], f[1]
 	t, _ := strconv.ParseInt(f[3], 10, 64)
 	c := Commit{SHA: f[0], Kurz: f[0][:8], Autor: f[1], Email: f[2], Zeit: time.Unix(t, 0), Betreff: f[4], Text: strings.TrimSpace(f[5])}
 	return c, diffLesen(rest), nil
@@ -203,9 +210,16 @@ func commitMitDiff(ctx context.Context, repo, sha string) (Commit, []DiffDatei, 
 
 var abschnittKopf = regexp.MustCompile(`^@@ .*?\+(\d+)(?:,\d+)? @@`)
 
-// diffZwischen: was quelle seit dem gemeinsamen Anfang mit ziel geändert hat.
+// diffZwischen zeigt, was das Zusammenführen am Ziel ändert: gegen denselben
+// Baum, den der Merge schreibt. Nur bei Konflikt, wo es keinen Merge gibt,
+// bleibt der Vergleich mit dem gemeinsamen Anfang.
 func diffZwischen(ctx context.Context, repo, ziel, quelle string) ([]DiffDatei, error) {
-	aus, err := gitAus(ctx, repo, "diff", "--patch", "--no-color", "--no-ext-diff", "--no-textconv", "-M", "--end-of-options", ziel+"..."+quelle, "--")
+	staende := []string{ziel + "..." + quelle}
+	if baum, err := mergeBaum(ctx, repo, ziel, quelle); err == nil {
+		staende = []string{ziel, baum}
+	}
+	args := slices.Concat([]string{"diff", "--patch", "--no-color", "--no-ext-diff", "--no-textconv", "-M", "--end-of-options"}, staende, []string{"--"})
+	aus, err := gitAus(ctx, repo, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -231,8 +245,22 @@ func diffLesen(roh []byte) []DiffDatei {
 		// --- und +++ sind nur vor dem ersten Abschnitt Kopfzeilen, danach Inhalt.
 		if strings.HasPrefix(z, "@@") {
 			imAbschnitt = true
-		} else if !imAbschnitt && (strings.HasPrefix(z, "index ") || strings.HasPrefix(z, "--- ") || strings.HasPrefix(z, "+++ ")) {
-			continue
+		} else if !imAbschnitt {
+			d := &dateien[len(dateien)-1]
+			if n, ok := strings.CutPrefix(z, "+++ "); ok {
+				if n = entquotet(strings.TrimSuffix(n, "\t")); n != "/dev/null" {
+					d.Name = strings.TrimPrefix(n, "b/")
+				}
+				continue
+			}
+			for _, vor := range []string{"rename to ", "copy to "} {
+				if n, ok := strings.CutPrefix(z, vor); ok {
+					d.Name = entquotet(n)
+				}
+			}
+			if strings.HasPrefix(z, "index ") || strings.HasPrefix(z, "--- ") {
+				continue
+			}
 		}
 		akt := &dateien[len(dateien)-1]
 		k, nr := "", 0
@@ -265,11 +293,27 @@ func diffLesen(roh []byte) []DiffDatei {
 	return dateien
 }
 
+// diffName gilt nur, solange keine +++- oder rename-Zeile den Namen nennt. Dann
+// sind beide Hälften der Kopfzeile derselbe Name, getrennt genau in der Mitte.
 func diffName(z string) string {
-	if i := strings.LastIndex(z, " b/"); i > 0 {
-		return z[i+3:]
+	s := strings.TrimPrefix(z, "diff --git ")
+	if m := len(s) / 2; len(s)%2 == 1 && s[m] == ' ' {
+		a, b := entquotet(s[:m]), entquotet(s[m+1:])
+		if n, ok := strings.CutPrefix(b, "b/"); ok && a == "a/"+n {
+			return n
+		}
 	}
-	return strings.TrimPrefix(z, "diff --git ")
+	return s
+}
+
+// entquotet löst, was git bei Namen mit Steuerzeichen in Anführung setzt.
+func entquotet(s string) string {
+	if strings.HasPrefix(s, `"`) {
+		if u, err := strconv.Unquote(s); err == nil {
+			return u
+		}
+	}
+	return s
 }
 
 // ---------- git über HTTPS ----------
@@ -352,11 +396,30 @@ func (a *App) git(w http.ResponseWriter, r *http.Request, besitzer, name, rest s
 			"GIT_HTTP_EXPORT_ALL=1",
 			"GIT_HTTP_MAX_REQUEST_BUFFER=100M",
 			"REMOTE_USER=" + wer.Name,
+			// refs/replace täuschte jedem Leser andere Inhalte vor.
+			"GIT_NO_REPLACE_OBJECTS=1",
+			"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=receive.hideRefs", "GIT_CONFIG_VALUE_0=refs/replace",
 			"HOME=" + os.Getenv("HOME"),
 		},
 	}
-	if schreiben {
-		defer a.db.Exec(r.Context(), `UPDATE repos SET geaendert=now() WHERE id::text=$1`, repo.ID)
+	if schreiben && rest == "/git-receive-pack" {
+		p := a.pfad(repo.Besitzer, repo.Name)
+		vor, vorFehler := refStand(r.Context(), p)
+		defer func() {
+			ctx, ende := context.WithTimeout(context.WithoutCancel(r.Context()), 20*time.Second)
+			defer ende()
+			if _, err := a.db.Exec(ctx, `UPDATE repos SET geaendert=now() WHERE id::text=$1`, repo.ID); err != nil {
+				log.Printf("push %s: %v", repo.Voll(), err)
+			}
+			if vorFehler != nil {
+				return
+			}
+			if nach, err := refStand(ctx, p); err == nil {
+				if l := refAenderungen(vor, nach); len(l) > 0 {
+					a.melden(repo, "push", wer.Name, map[string]any{"refs": l})
+				}
+			}
+		}()
 	}
 	h.ServeHTTP(w, r)
 }

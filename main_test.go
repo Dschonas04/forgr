@@ -83,7 +83,7 @@ func TestSeitenRendern(t *testing.T) {
 		"tokens":        map[string]any{"Tokens": []Token{{ID: "t", Name: "Laptop", Anfang: "fgr_1234", Erstellt: jetzt}}, "Neu": "fgr_x", "Ich": ich, "Basis": "https://x"},
 		"baum":          a,
 		"datei":         DateiAnsicht{Ansicht: a, Name: "d.go", Text: "package x\n", Zeilen: 2, Groesse: 10},
-		"commits":       map[string]any{"A": a, "Commits": []Commit{c}},
+		"commits":       map[string]any{"A": a, "Commits": []Commit{c}, "Status": map[string][]Pruefung{}},
 		"commit":        map[string]any{"A": a, "C": c, "Dateien": []DiffDatei{{Name: "d.go", Plus: 1, Minus: 1, Zeilen: []DiffZeile{{Klasse: "abschnitt", Text: "@@"}, {Klasse: "plus", Text: "+a"}}}}, "Plus": 1, "Minus": 1},
 		"einstellungen": map[string]any{"A": a, "Mitglieder": []Mitglied{{"anna", "Anna", "lesen"}}},
 		"issues":        map[string]any{"A": a, "Issues": []Issue{{Nummer: 1, Titel: "Bug", Offen: true, Erstellt: jetzt}}, "OffeneListe": true},

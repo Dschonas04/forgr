@@ -72,8 +72,7 @@ func zweigStand(ctx context.Context, repo, zweig string) (string, error) {
 	if !sichererRef(zweig) {
 		return "", errors.New("Zweigname ungültig")
 	}
-	aus, err := gitAus(ctx, repo, "rev-parse", "--verify", "--quiet", "refs/heads/"+zweig+"^{commit}")
-	return strings.TrimSpace(string(aus)), err
+	return commitVon(ctx, repo, "refs/heads/"+zweig)
 }
 
 func (a *App) mrListe(w http.ResponseWriter, r *http.Request) {
@@ -160,7 +159,11 @@ func (a *App) mrZeigen(w http.ResponseWriter, r *http.Request) {
 	var diffFehler string
 	konflikt := false
 	if !fehlt {
-		if dateien, err = diffZwischen(ctx, p, zs, qs); err != nil {
+		was := qs
+		if m.MergeSHA != "" {
+			was = m.MergeSHA // was wirklich gelandet ist
+		}
+		if dateien, err = diffZwischen(ctx, p, zs, was); err != nil {
 			diffFehler = "Die Änderungen lassen sich nicht zeigen (zu groß oder ohne gemeinsamen Anfang)."
 		}
 		if m.Offen() {
@@ -228,7 +231,7 @@ func (a *App) mrZeigen(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a.v.zeigen(w, r, "mr", a.daten(r, m.Titel+" · "+repo.Voll(), "", map[string]any{
-		"A": a.ansicht(r, repo, recht, "", ""), "M": m, "Text": mdSicher(m.Text), "SHA": qs,
+		"A": a.ansicht(r, repo, recht, "", ""), "M": m, "Text": mdSicher(m.Text), "SHA": qs, "ZielSHA": zs, "Pruefungen": a.pruefungen(ctx, repo.ID, qs)[qs],
 		"Dateien": review, "Plus": plus, "Minus": minus, "Beitraege": allgemein, "DiffFehler": diffFehler,
 		"Fehlt": fehlt, "Konflikt": konflikt, "Ja": ja, "Nein": nein,
 	}))
@@ -248,6 +251,10 @@ func (a *App) mrBeitrag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hier := "/" + repo.Voll() + "/mr/" + strconv.Itoa(m.Nummer)
+	if u := r.FormValue("art"); (u == "zustimmung" || u == "aenderung") && (!m.Offen() || r.FormValue("zustand") != "") {
+		zurueck(w, r, hier, "Ein Urteil gibt es nur am offenen Merge-Request")
+		return
+	}
 	if z := r.FormValue("zustand"); z != "" {
 		if recht != "schreiben" && ich.ID != m.VerfasserID {
 			http.Error(w, "Schließen darf, wer schreibt oder ihn angelegt hat", http.StatusForbidden)
@@ -258,6 +265,10 @@ func (a *App) mrBeitrag(w http.ResponseWriter, r *http.Request) {
 			neu, vorher = "offen", "geschlossen"
 		}
 		if _, err := a.db.Exec(r.Context(), `UPDATE mrs SET zustand=$2, geaendert=now() WHERE id::text=$1 AND zustand=$3`, m.ID, neu, vorher); err != nil {
+			zurueck(w, r, hier, "Nicht gespeichert")
+			return
+		}
+		if m, err = a.mrLaden(r, repo); err != nil {
 			zurueck(w, r, hier, "Nicht gespeichert")
 			return
 		}
@@ -275,10 +286,15 @@ func (a *App) mrBeitrag(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	sha := r.FormValue("sha")
-	if jetzt, err := zweigStand(r.Context(), a.pfad(repo.Besitzer, repo.Name), m.Quelle); m.Offen() && (err != nil || jetzt != sha) {
-		zurueck(w, r, hier, "Der Zweig hat sich geändert, bitte noch einmal ansehen")
-		return
+	// Den Stand bestimmt der Server, das Formular bestätigt ihn nur.
+	sha := m.QuelleSHA
+	if sha == "" {
+		jetzt, err := zweigStand(r.Context(), a.pfad(repo.Besitzer, repo.Name), m.Quelle)
+		if m.Offen() && (err != nil || jetzt != r.FormValue("sha")) {
+			zurueck(w, r, hier, "Der Zweig hat sich geändert, bitte noch einmal ansehen")
+			return
+		}
+		sha = jetzt
 	}
 	datei, zeile := r.FormValue("datei"), 0
 	if datei != "" {
@@ -289,8 +305,10 @@ func (a *App) mrBeitrag(w http.ResponseWriter, r *http.Request) {
 		}
 		zeile = int(n)
 	}
-	if _, err := a.db.Exec(r.Context(), `INSERT INTO mr_beitraege (mr, verfasser, art, text, datei, zeile, sha)
-		VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)`, m.ID, ich.ID, art, text, datei, zeile, sha); err != nil {
+	if e, err := a.db.Exec(r.Context(), `INSERT INTO mr_beitraege (mr, verfasser, art, text, datei, zeile, sha)
+		SELECT $1::uuid, $2::uuid, $3::text, $4::text, $5::text, $6::int, $7::text
+		WHERE $3::text = 'kommentar' OR EXISTS (SELECT 1 FROM mrs WHERE id=$1::uuid AND zustand='offen')`,
+		m.ID, ich.ID, art, text, datei, zeile, sha); err != nil || e.RowsAffected() == 0 {
 		zurueck(w, r, hier, "Nicht gespeichert")
 		return
 	}
@@ -346,7 +364,7 @@ func (a *App) mrZusammenfuehren(w http.ResponseWriter, r *http.Request) {
 	p := a.pfad(repo.Besitzer, repo.Name)
 	qs, err1 := zweigStand(ctx, p, m.Quelle)
 	zs, err2 := zweigStand(ctx, p, m.Ziel)
-	if err1 != nil || err2 != nil || qs != r.FormValue("sha") {
+	if err1 != nil || err2 != nil || qs != r.FormValue("sha") || zs != r.FormValue("ziel_sha") {
 		zurueck(w, r, hier, "Der Zweig hat sich geändert, bitte noch einmal ansehen")
 		return
 	}
@@ -390,5 +408,6 @@ func (a *App) mrZusammenfuehren(w http.ResponseWriter, r *http.Request) {
 	if _, err := a.db.Exec(ctx, `UPDATE repos SET geaendert=now() WHERE id::text=$1`, repo.ID); err != nil {
 		log.Printf("merge %s: %v", repo.Voll(), err)
 	}
+	a.melden(repo, "merge", ich.Name, map[string]any{"nummer": m.Nummer, "ziel": m.Ziel, "vorher": zs, "nachher": neu})
 	zurueck(w, r, hier, "Zusammengeführt")
 }

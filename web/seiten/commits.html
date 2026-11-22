@@ -1,11 +1,11 @@
 {{define "inhalt"}}
-{{$a := .D.A}}
+{{$a := .D.A}}{{$s := .D.Status}}
 {{template "repokopf" $a}}
 <div class="leiste"><h2 style="margin:0">Commits auf {{$a.Ref}}</h2>
   <form class="inline" id="zweigwahl"><select aria-label="Zweig" data-ziel="/{{$a.R.Voll}}/commits/">{{range $a.Zweige}}<option{{if eq . $a.Ref}} selected{{end}}>{{.}}</option>{{end}}</select></form></div>
 <table>
   {{range .D.Commits}}
-  <tr class="zeile"><td><a href="/{{$a.R.Voll}}/commit/{{.SHA}}"><strong>{{.Betreff}}</strong></a><div class="muted klein">{{.Autor}} · {{datum .Zeit}}</div></td>
+  <tr class="zeile"><td><a href="/{{$a.R.Voll}}/commit/{{.SHA}}"><strong>{{.Betreff}}</strong></a><div class="muted klein">{{.Autor}} · {{datum .Zeit}}</div>{{template "pruefungen" (index $s .SHA)}}</td>
     <td style="text-align:right"><a class="code klein" href="/{{$a.R.Voll}}/commit/{{.SHA}}">{{.Kurz}}</a> <a class="knopf klein" href="/{{$a.R.Voll}}/baum/{{.SHA}}/">Dateien</a></td></tr>
   {{else}}<tr><td class="muted">Keine Commits.</td></tr>{{end}}
 </table>

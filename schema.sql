@@ -105,3 +105,45 @@ CREATE TABLE IF NOT EXISTS releases (
 	erstellt  timestamptz NOT NULL DEFAULT now(),
 	PRIMARY KEY (repo, tag)
 );
+
+-- Gruppen: wer eine anlegt, verwaltet sie und gibt ihr Rechte an eigenen Repos.
+CREATE TABLE IF NOT EXISTS teams (
+	id        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	besitzer  uuid NOT NULL REFERENCES konten(id) ON DELETE CASCADE,
+	name      text NOT NULL,
+	UNIQUE (besitzer, name)
+);
+
+CREATE TABLE IF NOT EXISTS team_mitglieder (
+	team   uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+	konto  uuid NOT NULL REFERENCES konten(id) ON DELETE CASCADE,
+	PRIMARY KEY (team, konto)
+);
+
+CREATE TABLE IF NOT EXISTS team_rechte (
+	repo   uuid NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+	team   uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+	recht  text NOT NULL DEFAULT 'lesen',        -- lesen | schreiben | verwalten
+	PRIMARY KEY (repo, team)
+);
+
+-- Ziele müssen in FORGR_WEBHOOK_ZIELE erlaubt sein.
+CREATE TABLE IF NOT EXISTS webhooks (
+	id       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	repo     uuid NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+	adresse  text NOT NULL,
+	stand    text NOT NULL DEFAULT '',
+	zuletzt  timestamptz
+);
+
+-- Was CI an einen Commit meldet.
+CREATE TABLE IF NOT EXISTS commit_status (
+	repo     uuid NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+	sha      text NOT NULL,
+	name     text NOT NULL,
+	zustand  text NOT NULL,                      -- pending | success | failure | error
+	adresse  text NOT NULL DEFAULT '',
+	text     text NOT NULL DEFAULT '',
+	zeit     timestamptz NOT NULL DEFAULT now(),
+	PRIMARY KEY (repo, sha, name)
+);

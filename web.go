@@ -45,15 +45,35 @@ func (a *App) rechtVon(ctx context.Context, r Repo, konto string) string {
 		return "schreiben"
 	}
 	if konto != "" {
-		var recht string
-		if a.db.QueryRow(ctx, `SELECT recht FROM rechte WHERE repo=$1::uuid AND konto=$2::uuid`, r.ID, konto).Scan(&recht) == nil {
-			return recht
+		switch recht := a.hoechstesRecht(ctx, r, konto); recht {
+		case "verwalten", "schreiben":
+			return "schreiben"
+		case "lesen":
+			return "lesen"
 		}
 	}
 	if !r.Privat {
 		return "lesen"
 	}
 	return ""
+}
+
+// hoechstesRecht aus eigenem Eintrag und den Gruppen des Besitzers.
+func (a *App) hoechstesRecht(ctx context.Context, r Repo, konto string) string {
+	if konto == "" {
+		return ""
+	}
+	var recht string
+	if err := a.db.QueryRow(ctx, `SELECT x.recht FROM (
+			SELECT recht FROM rechte WHERE repo=$1::uuid AND konto=$2::uuid
+			UNION ALL
+			SELECT tr.recht FROM team_rechte tr JOIN teams t ON t.id = tr.team JOIN team_mitglieder m ON m.team = t.id
+			WHERE tr.repo=$1::uuid AND m.konto=$2::uuid AND t.besitzer=$3::uuid
+		) x ORDER BY CASE x.recht WHEN 'verwalten' THEN 0 WHEN 'schreiben' THEN 1 ELSE 2 END LIMIT 1`,
+		r.ID, konto, r.BesitzerID).Scan(&recht); err != nil {
+		return ""
+	}
+	return recht
 }
 
 // zugang lädt das Repo aus der Adresse und prüft, ob die angemeldete Person
@@ -87,6 +107,8 @@ func (a *App) start(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := a.db.Query(r.Context(), "SELECT "+repoSpalten+` FROM repos r JOIN konten k ON k.id = r.besitzer
 		WHERE r.besitzer = $1::uuid OR NOT r.privat OR EXISTS (SELECT 1 FROM rechte x WHERE x.repo = r.id AND x.konto = $1::uuid)
+			OR EXISTS (SELECT 1 FROM team_rechte tr JOIN teams t ON t.id = tr.team JOIN team_mitglieder m ON m.team = t.id
+				WHERE tr.repo = r.id AND m.konto = $1::uuid AND t.besitzer = r.besitzer)
 		ORDER BY r.geaendert DESC`, ich.ID)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -366,7 +388,7 @@ func (a *App) commits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l, _ := protokoll(r.Context(), a.pfad(repo.Besitzer, repo.Name), ref, 200)
-	a.v.zeigen(w, r, "commits", a.daten(r, "Commits · "+repo.Voll(), "", map[string]any{"A": a.ansicht(r, repo, recht, ref, ""), "Commits": l}))
+	a.v.zeigen(w, r, "commits", a.daten(r, "Commits · "+repo.Voll(), "", map[string]any{"A": a.ansicht(r, repo, recht, ref, ""), "Commits": l, "Status": a.pruefungen(r.Context(), repo.ID, hashes(l)...)}))
 }
 
 func (a *App) commit(w http.ResponseWriter, r *http.Request) {
@@ -390,7 +412,15 @@ func (a *App) commit(w http.ResponseWriter, r *http.Request) {
 	}
 	a.v.zeigen(w, r, "commit", a.daten(r, c.Betreff+" · "+repo.Voll(), "", map[string]any{
 		"A": a.ansicht(r, repo, recht, standardzweig(r.Context(), a.pfad(repo.Besitzer, repo.Name)), ""),
-		"C": c, "Dateien": d, "Plus": plus, "Minus": minus}))
+		"C": c, "Pruefungen": a.pruefungen(r.Context(), repo.ID, c.SHA)[c.SHA], "Dateien": d, "Plus": plus, "Minus": minus}))
+}
+
+func hashes(l []Commit) []string {
+	s := []string{}
+	for _, c := range l {
+		s = append(s, c.SHA)
+	}
+	return s
 }
 
 // ---------- Einstellungen ----------
@@ -402,8 +432,8 @@ func (a *App) einstellungen(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if ich.ID != repo.BesitzerID {
-		http.Error(w, "Nur der Besitzer ändert die Einstellungen", http.StatusForbidden)
+	if !a.darfVerwalten(r.Context(), repo, ich.ID) {
+		http.Error(w, "Die Einstellungen ändert, wer das Repository verwaltet", http.StatusForbidden)
 		return
 	}
 	rows, _ := a.db.Query(r.Context(), `SELECT k.name, k.anzeige, x.recht FROM rechte x JOIN konten k ON k.id = x.konto WHERE x.repo=$1::uuid ORDER BY k.name`, repo.ID)
@@ -417,8 +447,15 @@ func (a *App) einstellungen(w http.ResponseWriter, r *http.Request) {
 	if rows != nil {
 		rows.Close()
 	}
+	teams, err1 := a.teamsVon(r.Context(), repo.BesitzerID, repo.ID)
+	hooks, err2 := a.webhooksVon(r.Context(), repo.ID)
+	if err1 != nil || err2 != nil {
+		http.Error(w, "Datenbank", http.StatusInternalServerError)
+		return
+	}
 	a.v.zeigen(w, r, "einstellungen", a.daten(r, "Einstellungen · "+repo.Voll(), "", map[string]any{
-		"A": a.ansicht(r, repo, recht, "", ""), "Mitglieder": l}))
+		"A": a.ansicht(r, repo, recht, "", ""), "Mitglieder": l,
+		"Besitzer": ich.ID == repo.BesitzerID, "Teams": teams, "Hooks": hooks, "HooksAn": a.hooks.an()}))
 }
 
 func (a *App) besitzerFormular(w http.ResponseWriter, r *http.Request) (Repo, bool) {
@@ -436,18 +473,40 @@ func (a *App) besitzerFormular(w http.ResponseWriter, r *http.Request) (Repo, bo
 	return repo, true
 }
 
+func (a *App) verwalterFormular(w http.ResponseWriter, r *http.Request) (Repo, Konto, bool) {
+	if !pruefeFormular(w, r) {
+		return Repo{}, Konto{}, false
+	}
+	repo, ich, _, ok := a.zugang(w, r)
+	if !ok {
+		return repo, ich, false
+	}
+	if !a.darfVerwalten(r.Context(), repo, ich.ID) {
+		http.Error(w, "Nur, wer das Repository verwaltet", http.StatusForbidden)
+		return repo, ich, false
+	}
+	return repo, ich, true
+}
+
 func (a *App) einstellungenSpeichern(w http.ResponseWriter, r *http.Request) {
-	repo, ok := a.besitzerFormular(w, r)
+	repo, ich, ok := a.verwalterFormular(w, r)
 	if !ok {
 		return
 	}
-	a.db.Exec(r.Context(), `UPDATE repos SET beschreibung=$2, privat=$3 WHERE id::text=$1`,
-		repo.ID, strings.TrimSpace(r.FormValue("beschreibung")), r.FormValue("oeffentlich") != "ja")
+	privat := repo.Privat
+	if ich.ID == repo.BesitzerID { // wer sieht es: das entscheidet der Besitzer
+		privat = r.FormValue("oeffentlich") != "ja"
+	}
+	if _, err := a.db.Exec(r.Context(), `UPDATE repos SET beschreibung=$2, privat=$3 WHERE id::text=$1`,
+		repo.ID, strings.TrimSpace(r.FormValue("beschreibung")), privat); err != nil {
+		zurueck(w, r, "/"+repo.Voll()+"/einstellungen", "Nicht gespeichert")
+		return
+	}
 	zurueck(w, r, "/"+repo.Voll()+"/einstellungen", "Gespeichert")
 }
 
 func (a *App) mitgliedSetzen(w http.ResponseWriter, r *http.Request) {
-	repo, ok := a.besitzerFormular(w, r)
+	repo, ich, ok := a.verwalterFormular(w, r)
 	if !ok {
 		return
 	}
@@ -457,15 +516,24 @@ func (a *App) mitgliedSetzen(w http.ResponseWriter, r *http.Request) {
 		zurueck(w, r, ziel, "Dieses Konto gibt es nicht. Es entsteht bei der ersten Anmeldung.")
 		return
 	}
-	switch recht := r.FormValue("recht"); recht {
-	case "lesen", "schreiben":
-		a.db.Exec(r.Context(), `INSERT INTO rechte (repo, konto, recht) VALUES ($1::uuid, $2::uuid, $3)
-			ON CONFLICT (repo, konto) DO UPDATE SET recht=$3`, repo.ID, k.ID, recht)
-		zurueck(w, r, ziel, k.Name+" darf jetzt "+recht)
-	default:
-		a.db.Exec(r.Context(), `DELETE FROM rechte WHERE repo=$1::uuid AND konto=$2::uuid`, repo.ID, k.ID)
-		zurueck(w, r, ziel, k.Name+" entfernt")
+	besitzer, recht := ich.ID == repo.BesitzerID, r.FormValue("recht")
+	// Verwalten gibt und nimmt nur der Besitzer, die Bedingung steht im SQL.
+	if recht == "verwalten" && !besitzer {
+		http.Error(w, "Verwalten vergibt nur der Besitzer", http.StatusForbidden)
+		return
 	}
+	q, args, meldung := `DELETE FROM rechte WHERE repo=$1::uuid AND konto=$2::uuid AND ($3 OR recht <> 'verwalten')`,
+		[]any{repo.ID, k.ID, besitzer}, k.Name+" entfernt"
+	switch recht {
+	case "lesen", "schreiben", "verwalten":
+		q, args = `INSERT INTO rechte (repo, konto, recht) VALUES ($1::uuid, $2::uuid, $4)
+			ON CONFLICT (repo, konto) DO UPDATE SET recht=$4 WHERE $3 OR rechte.recht <> 'verwalten'`, append(args, recht)
+		meldung = k.Name + " darf jetzt " + recht
+	}
+	if e, err := a.db.Exec(r.Context(), q, args...); err != nil || e.RowsAffected() == 0 {
+		meldung = "Nicht geändert"
+	}
+	zurueck(w, r, ziel, meldung)
 }
 
 func (a *App) repoLoeschen(w http.ResponseWriter, r *http.Request) {

@@ -71,7 +71,7 @@ func (a *App) releaseSpeichern(w http.ResponseWriter, r *http.Request) {
 	if !pruefeFormular(w, r) {
 		return
 	}
-	repo, _, recht, ok := a.zugang(w, r)
+	repo, ich, recht, ok := a.zugang(w, r)
 	if !ok {
 		return
 	}
@@ -89,7 +89,7 @@ func (a *App) releaseSpeichern(w http.ResponseWriter, r *http.Request) {
 		zurueck(w, r, hier, "Tagname ungültig")
 		return
 	}
-	if _, err := gitAus(r.Context(), p, "rev-parse", "--verify", "--quiet", "refs/tags/"+tag); err != nil {
+	if _, err := exaktesRef(r.Context(), p, "refs/tags/"+tag); err != nil {
 		sha, err := zweigStand(r.Context(), p, r.FormValue("zweig"))
 		if err != nil {
 			zurueck(w, r, hier, "Diesen Zweig gibt es nicht")
@@ -110,6 +110,7 @@ func (a *App) releaseSpeichern(w http.ResponseWriter, r *http.Request) {
 		zurueck(w, r, hier, "Nicht gespeichert")
 		return
 	}
+	a.melden(repo, "release", ich.Name, map[string]any{"tag": tag})
 	zurueck(w, r, hier, "Release gespeichert")
 }
 
@@ -124,7 +125,7 @@ func (a *App) archiv(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	aus, err := gitAus(r.Context(), p, "rev-parse", "--verify", "--quiet", "refs/tags/"+tag+"^{commit}")
+	sha, err := commitVon(r.Context(), p, "refs/tags/"+tag)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -132,7 +133,7 @@ func (a *App) archiv(w http.ResponseWriter, r *http.Request) {
 	stamm := repo.Name + "-" + strings.ReplaceAll(tag, "/", "-")
 	ctx, ende := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer ende()
-	cmd := exec.CommandContext(ctx, "git", "-C", p, "archive", "--format=tar.gz", "--prefix="+stamm+"/", strings.TrimSpace(string(aus)))
+	cmd := exec.CommandContext(ctx, "git", "-C", p, "archive", "--format=tar.gz", "--prefix="+stamm+"/", sha)
 	cmd.Env = gitUmgebung()
 	cmd.Stdout = w
 	w.Header().Set("Content-Type", "application/gzip")

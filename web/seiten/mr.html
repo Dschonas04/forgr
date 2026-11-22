@@ -6,6 +6,7 @@
   {{if $d.Nein}}<span class="pille warn">Änderungen gewünscht</span>{{end}}
 </div>
 <p class="muted klein">{{$m.Verfasser}} möchte <span class="code">{{$m.Quelle}}</span> in <span class="code">{{$m.Ziel}}</span> übernehmen</p>
+{{template "pruefungen" $d.Pruefungen}}
 {{if $m.Text}}<div class="readme">{{$d.Text}}</div>{{end}}
 {{if $m.Offen}}
 <div class="karte merge-stand">
@@ -13,7 +14,7 @@
   {{else if $d.Konflikt}}<span class="pille schlecht">Konflikte</span> <span class="muted">Bitte lokal auflösen und pushen.</span>
   {{else}}<span class="pille gut">ohne Konflikte</span>
     {{if eq $a.Recht "schreiben"}}<form method="post" action="/{{$a.R.Voll}}/mr/{{$m.Nummer}}/zusammen">
-      <input type="hidden" name="token" value="{{$t}}"><input type="hidden" name="sha" value="{{$d.SHA}}">
+      <input type="hidden" name="token" value="{{$t}}"><input type="hidden" name="sha" value="{{$d.SHA}}"><input type="hidden" name="ziel_sha" value="{{$d.ZielSHA}}">
       <button class="primaer">Zusammenführen</button></form>{{end}}
   {{end}}
 </div>
