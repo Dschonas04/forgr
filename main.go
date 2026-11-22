@@ -62,6 +62,8 @@ var gitPfad = regexp.MustCompile(`^/([a-z0-9][a-z0-9._-]*)/([A-Za-z0-9][A-Za-z0-
 func (a *App) wege() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("GET /healthz", gesund)
+	m.HandleFunc("GET /favicon.svg", logo)
+	m.HandleFunc("GET /favicon.ico", logo)
 	m.Handle("GET /statisch/", statisch())
 	a.sso.Wege(m, a.angemeldet)
 

@@ -19,7 +19,7 @@ git push -u origin main</pre>
   <span><a href="/{{$a.R.Voll}}/baum/{{$a.Ref}}/">{{$a.R.Name}}</a>{{range $a.Teile}} / <a href="/{{$a.R.Voll}}/baum/{{$a.Ref}}/{{.Pfad}}">{{.Name}}</a>{{end}}</span>
   <span style="margin-left:auto" class="klonen"><input type="text" readonly value="{{$a.Klonen}}" aria-label="Adresse zum Klonen" style="width:340px"></span>
 </div>
-{{if $a.Letzter}}<div class="muted klein" style="margin-bottom:8px"><a href="/{{$a.R.Voll}}/commit/{{$a.Letzter.SHA}}" class="code">{{$a.Letzter.Kurz}}</a> {{$a.Letzter.Betreff}} · {{$a.Letzter.Autor}} · vor {{seit $a.Letzter.Zeit}}</div>{{end}}
+{{if $a.Letzter}}<div class="muted klein" style="margin-bottom:8px"><a href="/{{$a.R.Voll}}/commit/{{$a.Letzter.SHA}}" class="code">{{$a.Letzter.Kurz}}</a> {{$a.Letzter.Betreff}} · {{$a.Letzter.Autor}} · {{seit $a.Letzter.Zeit}}</div>{{end}}
 <table class="dateien">
   {{if $a.Pfad}}<tr class="zeile"><td colspan="2"><a href="/{{$a.R.Voll}}/baum/{{$a.Ref}}/{{$a.Eltern}}">..</a></td></tr>{{end}}
   {{range $a.Eintraege}}
