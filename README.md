@@ -1,53 +1,56 @@
-# Forgr
+<p align="center"><img src="docs/logo.svg" width="76" alt=""></p>
+<h1 align="center">Forgr</h1>
+<p align="center">Eigenes Git-Hosting mit Merge-Requests, Issues und CI-Status.</p>
 
-Eigenes Git-Hosting: Repositories, Merge-Requests, Issues und CI-Anbindung, auf dem eigenen Server.
+![Merge-Request](docs/merge-request.png)
 
-**Stand: 0.1.** Repositories über HTTPS (Smart HTTP, Benutzername plus
-Zugriffstoken), privat oder für alle Konten sichtbar, Import von einer https-Adresse,
-Dateien und Zweige, README-Anzeige, Commits mit Diff, Rohdateien, Issues mit
-Kommentaren, Mitglieder mit Lese- oder Schreibrecht, Anmeldung über
-Keycloak. SSH, Merge-Requests und Webhooks kommen noch.
+## Was es kann
 
-## Geplant
-
-* **Repositories über HTTPS und SSH** (Smart HTTP und eigener SSH-Server in Go)
-* **Weboberfläche**: Dateien, Commits, Diffs, Blame, Zweige, Tags, Releases
-* **Merge-Requests** mit Review, Kommentaren an Zeilen und Zusammenführen im Browser
-* **Issues** mit Labels und Meilensteinen
-* **Gruppen und Teams**, Rechte je Repository (lesen, schreiben, verwalten)
-* **Webhooks** und Anbindung von CI-Runnern, Status an Commits
-* **Spiegel** von und nach GitHub
-* **Anmeldung über Keycloak**, SSH-Schlüssel und Zugriffstoken je Konto
-* Später: Git LFS, Container-Registry
-
-## Schritte
-
-1. Repositories anlegen, klonen und pushen über Smart HTTP
-2. Dateibrowser, Commits, Diffs
-3. Konten, Keycloak, Rechte
-4. SSH-Zugang mit eigenen Schlüsseln
-5. Merge-Requests und Issues
-6. Webhooks, CI-Status, Spiegel
+| Bereich | Funktionen |
+|---|---|
+| Git | HTTPS mit Zugriffstoken, Import von https, Dateien, Commits, Diffs, Blame |
+| Merge-Requests | Review, Kommentare an Zeilen, Konfliktprüfung, Zusammenführen im Browser |
+| Issues | Kommentare, Labels, Meilensteine |
+| Releases | Tags mit Notizen, Quelltext als tar.gz |
+| Rechte | lesen, schreiben, verwalten, für Konten und Gruppen |
+| Anbindung | Webhooks, Commit-Status, Spiegel über https |
 
 ## Starten
 
 ```bash
 cp .env.beispiel .env            # Kennwort für die Datenbank eintragen
 docker compose up -d --build
+docker compose logs forgr        # Link mit Einrichtungscode
 ```
 
-Danach unter `http://<host>:8380`. Im Homelab kommt TLS über Caddy mit
-der Homelab-CA davor, der Dienst selbst lauscht dann auf `127.0.0.1:28380`.
+Forgr läuft unter `http://<host>:8380`. Das erste Konto aus dem Link verwaltet
+die App, bei OIDC trägt man den Admin in `FORGR_ADMIN` ein.
+
+## CI-Status
+
+```bash
+curl -u name:token -d '{"name":"bau","zustand":"success"}' \
+  https://host/api/repos/besitzer/repo/status/<voller Commit-Hash>
+```
+
+Zustände: `pending`, `success`, `failure`, `error`.
+
+## Webhooks und Spiegel
+
+Beides ist aus, bis es in der `.env` steht, siehe `.env.beispiel`. Webhooks
+gehen nur an freigegebene Hosts. Spiegel überschreiben und löschen nichts.
+
+## Grenzen
+
+* Kein SSH, kein Git LFS, keine Container-Registry.
+* Merge-Requests nur zwischen Zweigen eines Repositorys, Konflikte löst man lokal.
 
 ## Entwickeln
 
 ```bash
-go run .
 go test ./...
+# mit Datenbank; sie wird geleert, der Name muss mit pruef beginnen
+FORGR_TEST_DB=postgres://.../pruef_forgr go test ./...
 ```
 
-Go 1.27.4, Datenbank PostgreSQL. Das Schema steht in `schema.sql`.
-
-## Lizenz
-
-MIT, siehe [LICENSE](LICENSE).
+Go 1.27.4, PostgreSQL 17. Lizenz: MIT, siehe [LICENSE](LICENSE).
