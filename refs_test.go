@@ -46,6 +46,9 @@ func TestRefsNichtUntergeschoben(t *testing.T) {
 			t.Errorf("%s: %q statt %q (%v)", rest, b, soll, err)
 		}
 	}
+	if b, err := inhalt(t.Context(), bare, "HEAD", "a"); err != nil || string(b) != "echt" {
+		t.Errorf("HEAD: %q %v", b, err)
+	}
 	gitTest(t, bare, "update-ref", "-d", "refs/tags/main")
 	gitTest(t, arbeit, "push", bare, falsch+":refs/tags/main/ordner")
 	ref, pfad := refUndPfad(t.Context(), bare, "main/ordner/a")

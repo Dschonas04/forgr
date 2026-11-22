@@ -46,6 +46,9 @@ func aufloesen(ctx context.Context, repo, ref string) (string, error) {
 	if !sichererRef(ref) {
 		return "", errUnbekannterStand
 	}
+	if ref == "HEAD" {
+		ref = standardzweig(ctx, repo)
+	}
 	kandidaten := []string{"refs/heads/" + ref, "refs/tags/" + ref}
 	if vollerHash.MatchString(ref) {
 		kandidaten = []string{ref}

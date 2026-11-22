@@ -222,7 +222,7 @@ func TestAblaufMitGit(t *testing.T) {
 		t.Errorf("Labels: %d", code)
 	}
 
-	for _, p := range []string{"", "/mr", "/mr?zu=ja", "/mr/1", "/mr/2", "/releases", "/blame/main/a.sql", "/issues", "/issues/1", "/commits/main", "/baum/main/", "/datei/main/a.sql"} {
+	for _, p := range []string{"", "/mr", "/mr?zu=ja", "/mr/1", "/mr/2", "/releases", "/blame/main/a.sql", "/issues", "/issues/1", "/commits/main", "/commits/HEAD", "/baum/main/", "/datei/main/a.sql"} {
 		if code, b := ruf("GET", "/anna/probe"+p, nil); code != 200 || !strings.Contains(b, "</html>") {
 			t.Errorf("Seite %q: %d", p, code)
 		}
