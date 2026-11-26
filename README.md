@@ -2,6 +2,15 @@
 <h1 align="center">Forgr</h1>
 <p align="center">Eigenes Git-Hosting mit Merge-Requests, Issues und CI-Status.</p>
 
+<p align="center">
+
+[![prüfen](https://github.com/Dschonas04/forgr/actions/workflows/pruefen.yml/badge.svg)](https://github.com/Dschonas04/forgr/actions/workflows/pruefen.yml)
+[![Go 1.27](https://img.shields.io/badge/Go-1.27-00ADD8)](https://go.dev)
+[![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1)](https://www.postgresql.org)
+[![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-blue.svg)](LICENSE)
+
+</p>
+
 ![Merge-Request](docs/merge-request.png)
 
 ## Was es kann
@@ -54,4 +63,8 @@ go test ./...
 FORGR_TEST_DB=postgres://.../pruef_forgr go test ./...
 ```
 
-Go 1.27.4, PostgreSQL 17. Lizenz: MIT, siehe [LICENSE](LICENSE).
+Go 1.27.4, PostgreSQL 17.
+
+## Lizenz
+
+MIT, siehe [LICENSE](LICENSE).
